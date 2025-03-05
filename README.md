@@ -5,13 +5,14 @@ Adds imgix powered asset transforms to Craft CMS:
 1. Drop-in replacement for Craft CMS native [image transforms](https://craftcms.com/docs/5.x/development/image-transforms.html) and [.srcset()](https://craftcms.com/docs/5.x/development/image-transforms.html#generating-srcset-sizes) method
 2. Add additional imgix parameters to image transforms
 3. Use imgix for CP thumbnails
+4. Allows `.pdf` files to be rasterized and transformed (unlike Craft CMS transforms)
 
 The only thing you'll need to update is your [filesystem Base URL](https://craftcms.com/docs/5.x/reference/element-types/assets.html#filesystems)
 to use your imgix domain.
 
 ## Requirements
 
-This plugin requires Craft CMS 4.0.0 or later, and PHP 8.3.0 or later.
+This plugin requires Craft CMS 4.0.0 or later, and PHP 8.0.2 or later.
 
 See Caveats for additional requirements.
 
@@ -94,6 +95,18 @@ You can also apply additional imgix parameters to your image transforms by addin
 ```
 
 ### Caveats
+
+#### .svg
+
+imgix does not support rasterizing .svg inputs by default ([blog post](https://www.imgix.com/blog/announcing-support-for-webp-and-svg)).
+You will need to contact imgix to enable this feature. This plugin does add transform query parameters to .svg files regardless of this setting.
+
+#### .pdf
+.pdf file are served with `rasterize-bypass` set to true when no transform is provided. This will serve the original .pdf file.
+
+> The `rasterize-bypass` parameter allows users to bypass all rendering parameters, including default parameters, and serve the original image file. This is particularly useful for file formats that support vector graphics and do not require rasterization. [Source](https://docs.imgix.com/en-US/apis/rendering/format/rasterize-bypass)
+
+#### `imgix` object key values
 
 In Craft CMS < v5.6.0 the additional `imgix` object key values are lost
 when calling [.srcset()](https://craftcms.com/docs/5.x/development/image-transforms.html#generating-srcset-sizes).

@@ -6,19 +6,15 @@ use Craft;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
 use craft\elements\Asset;
-use craft\events\DefineAssetThumbUrlEvent;
+use craft\events\DefineAssetUrlEvent;
 use craft\events\DefineBehaviorsEvent;
 use craft\events\DefineFieldsEvent;
-use craft\events\GenerateTransformEvent;
 use craft\models\ImageTransform;
-use craft\services\Assets;
-use Imgix\UrlBuilder;
 use Newism\Imgix\behaviors\ImageTransformBehavior;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\services\ImgixService;
 use Newism\Imgix\web\twig\TwigExtension;
 use yii\base\Event;
-use yii\base\InvalidArgumentException;
 
 /**
  * Imgix plugin
@@ -79,16 +75,22 @@ class Plugin extends BasePlugin
             }
         );
 
+        /**
+         * For assets that don't have a transform we want to bypass rasterize
+         */
         Event::on(
             Asset::class,
-            Asset::EVENT_BEFORE_GENERATE_TRANSFORM,
-            function (GenerateTransformEvent $event) {
-                $event->url = self::$plugin->imgix->generateTransformUrl($event->asset, $event->transform);
+            Asset::EVENT_BEFORE_DEFINE_URL,
+            function (DefineAssetUrlEvent $event) {
+                /** @var Asset $asset */
+                $asset = $event->sender;
+                $transform = $event->transform;
+                $event->url = self::$plugin->imgix->generateUrl($asset, $transform);
             }
         );
     }
 
-    protected function createSettingsModel(): Model
+    protected function createSettingsModel(): Settings
     {
         return new Settings();
     }

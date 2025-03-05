@@ -10,5 +10,5 @@ use craft\base\Model;
 class Settings extends Model
 {
     public bool $devMode = false;
-    public array $defaultImgixParams = [];
+    public array|\Closure $defaultImgixParams = [];
 }
