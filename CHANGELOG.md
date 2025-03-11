@@ -7,7 +7,11 @@
 ## 5.0.0-alpha.2 - 2025-05-03
 
 - Fix: Added `rasterize-bypass` imgix parameter to prevent rasterization of SVGs where no transform is provided.
-- 
+
 ## 5.0.0-alpha.3 - 2025-05-12
 
-- Fix: return a null URL for admin svg image placeholders in card configuration previews.
+- Fix: return a null URL for admin svg image placeholders in card configuration previews
+- 
+## 5.0.0-alpha.4 - 2025-05-12
+
+- Fix: defer to the default Craft CMS transforms when the filesystem is Temp

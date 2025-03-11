@@ -4,6 +4,7 @@ namespace Newism\Imgix\services;
 
 use Craft;
 use craft\elements\Asset;
+use craft\fs\Temp;
 use craft\helpers\Assets;
 use craft\helpers\ImageTransforms;
 use Imgix\UrlBuilder;
@@ -17,8 +18,23 @@ class ImgixService extends ServiceLocator
         return 'data:image/svg+xml;charset=utf-8,' . rawurlencode("<svg xmlns='http://www.w3.org/2000/svg' width='$width' height='$height' style='background: transparent' />");
     }
 
-    public function generateUrl(Asset $asset, mixed $transform = null): string
+    public function generateUrl(Asset $asset, mixed $transform = null): ?string
     {
+        /**
+         * Check for temp fs and return null if it is allowing Craft CMS to handle the transform
+         */
+        $volume = $asset->getVolume();
+        $fs = $volume->getFs();
+
+        // Version check for Craft 4 where Assets::isTempUploadFs doesn't exit
+        if(version_compare(Craft::getVersion(), '4', '=') && ($fs instanceof Temp)) {
+            return null;
+        }
+        // Version check for Craft 5
+        if(version_compare(Craft::getVersion(), '5', '=') && Assets::isTempUploadFs($fs)) {
+            return null;
+        }
+
         $settings = Plugin::$plugin->getSettings();
 
         $defaultImgixParams = is_callable($settings->defaultImgixParams)
