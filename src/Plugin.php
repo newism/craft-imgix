@@ -84,6 +84,16 @@ class Plugin extends BasePlugin
             function (DefineAssetUrlEvent $event) {
                 /** @var Asset $asset */
                 $asset = $event->sender;
+
+                /**
+                 * If there is no folderId we don't want to generate a URL
+                 * This is the way Craft CMS works in order to generate placeholder svgs in cards and the admin
+                 * @see Asset::_url
+                 */
+                if($asset->folderId === null) {
+                    return;
+                }
+
                 $transform = $event->transform;
                 $event->url = self::$plugin->imgix->generateUrl($asset, $transform);
             }
