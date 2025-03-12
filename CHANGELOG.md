@@ -15,3 +15,11 @@
 ## 5.0.0-alpha.4 - 2025-05-12
 
 - Fix: defer to the default Craft CMS transforms when the filesystem is Temp
+
+## 5.0.0-alpha.5 - 2025-05-12
+
+- Fix: defer to the default Craft CMS transforms when the filesystem is Temp… again
+- Changed: `defaultImgixParams` to `imgixDefaultParams` in the plugin config
+- Added: `enabled` setting to the plugin config
+- Added: `imgixDomain` setting to the plugin config
+- Added: `volumes` setting to the plugin config allowing overriding at a volume level

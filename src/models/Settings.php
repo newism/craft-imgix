@@ -10,5 +10,8 @@ use craft\base\Model;
 class Settings extends Model
 {
     public bool $devMode = false;
-    public array|\Closure $defaultImgixParams = [];
+    public bool $enabled = true;
+    public ?string $imgixDomain = null;
+    public array $imgixDefaultParams = [];
+    public array $volumes = [];
 }

@@ -29,11 +29,15 @@ to use your imgix domain.
 
 ## Configuration
 
-Optional: Copy config.php into Crafts config folder and rename it to newism-imgix.php.
+Copy config.php into Crafts config folder and rename it to newism-imgix.php.
 
 ```shell
 cp vendor/newism/craft-imgix/src/config.php config/newism-imgix.php
 ```
+
+Update the `imgixDomain` settings key with your imgix domain.
+
+```php
 
 ## Usage
 

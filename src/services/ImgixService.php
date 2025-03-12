@@ -7,7 +7,9 @@ use craft\elements\Asset;
 use craft\fs\Temp;
 use craft\helpers\Assets;
 use craft\helpers\ImageTransforms;
+use craft\models\Volume;
 use Imgix\UrlBuilder;
+use Newism\Imgix\models\Settings;
 use Newism\Imgix\Plugin;
 use yii\di\ServiceLocator;
 
@@ -26,27 +28,30 @@ class ImgixService extends ServiceLocator
         $volume = $asset->getVolume();
         $fs = $volume->getFs();
 
-        // Version check for Craft 4 where Assets::isTempUploadFs doesn't exit
-        if(version_compare(Craft::getVersion(), '4', '=') && ($fs instanceof Temp)) {
-            return null;
-        }
         // Version check for Craft 5
-        if(version_compare(Craft::getVersion(), '5', '=') && Assets::isTempUploadFs($fs)) {
+        if(version_compare(Craft::$app->getVersion(), '5', '>') && Assets::isTempUploadFs($fs)) {
+            return null;
+        }
+        // Version check for Craft 4 where Assets::isTempUploadFs doesn't exit
+        elseif(version_compare(Craft::$app->getVersion(), '4', '>') && ($fs instanceof Temp)) {
             return null;
         }
 
-        $settings = Plugin::$plugin->getSettings();
+        $volumeSettings = $this->getSettingsForVolume($volume);
+        if(!$volumeSettings->enabled) {
+            return null;
+        }
 
-        $defaultImgixParams = is_callable($settings->defaultImgixParams)
-            ? $settings->defaultImgixParams($asset, $transform)
-            : ($settings->defaultImgixParams ?? []);
+        $defaultImgixParams = is_callable($volumeSettings->imgixDefaultParams)
+            ? $volumeSettings->imgixDefaultParams($asset, $transform)
+            : ($volumeSettings->imgixDefaultParams ?? []);
 
         $httpQueryParams = $defaultImgixParams;
 
         $cropPosition = $asset->getFocalPoint();
         $httpQueryParams['fp-x'] = $cropPosition['x'] ?? null;
         $httpQueryParams['fp-y'] = $cropPosition['y'] ?? null;
-        $httpQueryParams['fp-debug'] = $settings->devMode ?: null;
+        $httpQueryParams['fp-debug'] = $volumeSettings->devMode ?: null;
 
         $transform = ImageTransforms::normalizeTransform($transform);
 
@@ -138,7 +143,7 @@ class ImgixService extends ServiceLocator
             $httpQueryParams = array_merge($httpQueryParams, $transform->imgix ?? []);
 
             // If devMode is enabled we overlay the transform information on the image
-            if ($settings->devMode) {
+            if ($volumeSettings->devMode) {
                 $httpQueryParams['text-size'] = 18;
                 $httpQueryParams['txt-align'] = 'bottom,right';
                 $httpQueryParams['txt'] = "Craft: $transform->mode / Imgix: $imgixFit";
@@ -156,11 +161,13 @@ class ImgixService extends ServiceLocator
             }
         }
 
+        // Create a new builder with the imgixDomain
+        $builder = new UrlBuilder($volumeSettings->imgixDomain);
+
         $filesystem = $asset->getVolume()->getFs();
         $baseUrl = $filesystem->getRootUrl() ?? null;
         $assetUrl = implode("", [$baseUrl, $asset->folderPath, $asset->filename]);
-        ['host' => $host, 'path' => $path] = parse_url($assetUrl);
-        $builder = new UrlBuilder($host);
+        ['path' => $path] = parse_url($assetUrl);
 
         // Filter out null $httpQueryParams values
         $httpQueryParams = array_filter($httpQueryParams, fn($value) => $value !== null);
@@ -171,5 +178,20 @@ class ImgixService extends ServiceLocator
         }
 
         return $url;
+    }
+
+    public function getSettingsForVolume(Volume $volume): Settings
+    {
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+
+        $volumeSettings = array_merge([
+            'devMode' => $settings->devMode,
+            'enabled' => $settings->enabled,
+            'imgixDomain' => $settings->imgixDomain,
+            'imgixDefaultParams' => $settings->imgixDefaultParams,
+        ], $settings->volumes[$volume->handle] ?? []);
+
+        return new Settings($volumeSettings);
     }
 }
