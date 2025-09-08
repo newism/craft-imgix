@@ -162,7 +162,7 @@ class ImgixService extends ServiceLocator
         }
 
         // Create a new builder with the imgixDomain
-        $builder = new UrlBuilder($volumeSettings->imgixDomain);
+        $builder = new UrlBuilder($volumeSettings->imgixDomain, true, $volumeSettings->signingKey);
 
         $filesystem = $asset->getVolume()->getFs();
         $baseUrl = $filesystem->getRootUrl() ?? null;
@@ -189,6 +189,7 @@ class ImgixService extends ServiceLocator
             'devMode' => $settings->devMode,
             'enabled' => $settings->enabled,
             'imgixDomain' => $settings->imgixDomain,
+            'signingKey' => $settings->signingKey,
             'imgixDefaultParams' => $settings->imgixDefaultParams,
         ], $settings->volumes[$volume->handle] ?? []);
 

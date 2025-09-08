@@ -10,6 +10,8 @@ return [
 
     'imgixDomain' => App::env('CRAFT_IMGIX_DOMAIN') ?? 'your-domain.imgix.net',
 
+    'signingKey' => App::env('CRAFT_IMGIX_SIGNING_KEY') ?? '',
+
     // Default imgix parameters that will be applied to all images unless overridden.
     //'imgixDefaultParams' => [
     //    'auto' => 'format,compress',
