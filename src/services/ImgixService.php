@@ -5,16 +5,24 @@ namespace Newism\Imgix\services;
 use Craft;
 use craft\elements\Asset;
 use craft\fs\Temp;
+use craft\helpers\App;
 use craft\helpers\Assets;
 use craft\helpers\ImageTransforms;
 use craft\models\Volume;
 use Imgix\UrlBuilder;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\Plugin;
+use Psr\Http\Message\ResponseInterface;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Component\HttpClient\Retry\GenericRetryStrategy;
+use Symfony\Component\HttpClient\RetryableHttpClient;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 use yii\di\ServiceLocator;
 
 class ImgixService extends ServiceLocator
 {
+    private ?HttpClientInterface $client = null;
+
     public function getPlaceholderSVG(string $width, string $height): string
     {
         return 'data:image/svg+xml;charset=utf-8,' . rawurlencode("<svg xmlns='http://www.w3.org/2000/svg' width='$width' height='$height' style='background: transparent' />");
@@ -189,10 +197,95 @@ class ImgixService extends ServiceLocator
             'devMode' => $settings->devMode,
             'enabled' => $settings->enabled,
             'imgixDomain' => $settings->imgixDomain,
+            'apiBaseUri' => $settings->apiBaseUri,
+            'purgeApiKey' => $settings->purgeApiKey,
             'signingKey' => $settings->signingKey,
+            'debugLogging' => $settings->debugLogging,
             'imgixDefaultParams' => $settings->imgixDefaultParams,
         ], $settings->volumes[$volume->handle] ?? []);
 
         return new Settings($volumeSettings);
+    }
+
+    public function purgeUrl(string $url): ?array
+    {
+        // If there is no client we return null
+        $client = $this->getApiClient();
+        if (empty($client)) {
+            return null;
+        }
+
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+        $debugLogging = (bool) $settings->debugLogging;
+        $parsedUrl = parse_url($url);
+        if ($parsedUrl === false || !isset($parsedUrl['path'])) {
+            return null;
+        }
+
+        // Remove the query params and build the full URL
+        $sanitisedUrl = rtrim(str_replace($parsedUrl['query'] ?? '', '', $url), '?');
+
+        $payload = [
+            'json' => [
+                'data' => [
+                    'attributes' => [
+                        'url' => $sanitisedUrl,
+                    ],
+                    'type' => 'purges',
+                ],
+            ],
+        ];
+
+        // Send the request to the imgix API
+        $response = $client->request('POST', 'api/v1/purge', $payload);
+
+        // If logging is enabled we log the request and response for later reference
+        if ($debugLogging) {
+            $responseInfo = $response->getInfo();
+            // Use the `info` level as `debug` usually won't appear on a production site
+            Craft::info(sprintf(
+                "Purge: %s %s\nPayload: %s\nResponse (Code %s): %s",
+                $responseInfo['http_method'],
+                $responseInfo['url'],
+                json_encode($payload),
+                $response->getStatusCode(),
+                $response->getContent(false)
+            ), Plugin::DEBUG_LOG_CATEGORY);
+        }
+
+        return $response->getContent();
+    }
+
+    private function getApiClient(): ?HttpClientInterface
+    {
+        if ($this->client === null) {
+            /** @var Settings $settings */
+            $settings = Plugin::getInstance()->getSettings();
+            // Only create the client if we have a purgeApiKey
+            if ($settings->purgeApiKey) {
+                $clientOptions = [
+                    'base_uri' => $settings->apiBaseUri ?: 'https://api.imgix.com/',
+                    'timeout' => 100,
+                    'headers' => [
+                        'Accept' => 'application/json',
+                        'Authorization' => "Bearer " . $settings->purgeApiKey,
+                    ],
+                ];
+
+                $this->client = new RetryableHttpClient(
+                    HttpClient::create($clientOptions),
+                    new GenericRetryStrategy([
+                        500,
+                        502,
+                        503,
+                        504,
+                        429
+                    ])
+                );
+            }
+        }
+
+        return $this->client;
     }
 }
