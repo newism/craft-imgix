@@ -37,8 +37,6 @@ cp vendor/newism/craft-imgix/src/config.php config/newism-imgix.php
 
 Update the `imgixDomain` settings key with your imgix domain.
 
-```php
-
 ## Usage
 
 This plugin is a drop-in replacement for Craft CMS native [image transforms](https://craftcms.com/docs/5.x/development/image-transforms.html) and [.srcset()](https://craftcms.com/docs/5.x/development/image-transforms.html#generating-srcset-sizes) method.
