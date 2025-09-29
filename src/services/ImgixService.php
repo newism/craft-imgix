@@ -9,19 +9,17 @@ use craft\helpers\App;
 use craft\helpers\Assets;
 use craft\helpers\ImageTransforms;
 use craft\models\Volume;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ClientException;
 use Imgix\UrlBuilder;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\Plugin;
 use Psr\Http\Message\ResponseInterface;
-use Symfony\Component\HttpClient\HttpClient;
-use Symfony\Component\HttpClient\Retry\GenericRetryStrategy;
-use Symfony\Component\HttpClient\RetryableHttpClient;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 use yii\di\ServiceLocator;
 
 class ImgixService extends ServiceLocator
 {
-    private ?HttpClientInterface $client = null;
+    private ?Client $client = null;
 
     public function getPlaceholderSVG(string $width, string $height): string
     {
@@ -226,6 +224,8 @@ class ImgixService extends ServiceLocator
         // Remove the query params and build the full URL
         $sanitisedUrl = rtrim(str_replace($parsedUrl['query'] ?? '', '', $url), '?');
 
+        $method = 'POST';
+        $uri = 'api/v1/purge';
         $payload = [
             'json' => [
                 'data' => [
@@ -238,26 +238,39 @@ class ImgixService extends ServiceLocator
         ];
 
         // Send the request to the imgix API
-        $response = $client->request('POST', 'api/v1/purge', $payload);
+        try {
+            $response = $client->request('POST', 'api/v1/purge', $payload);
+        } catch (ClientException $e) {
+            throw new \RuntimeException(sprintf(
+                'Error: %s %s returned %s: %s',
+                $method,
+                $uri,
+                $e->getResponse()?->getStatusCode(),
+                (string) $e->getResponse()?->getBody()
+            ));
+        }
 
         // If logging is enabled we log the request and response for later reference
         if ($debugLogging) {
-            $responseInfo = $response->getInfo();
             // Use the `info` level as `debug` usually won't appear on a production site
             Craft::info(sprintf(
                 "Purge: %s %s\nPayload: %s\nResponse (Code %s): %s",
-                $responseInfo['http_method'],
-                $responseInfo['url'],
+                $method,
+                $uri,
                 json_encode($payload),
                 $response->getStatusCode(),
-                $response->getContent(false)
+                (string) $response->getBody()
             ), Plugin::DEBUG_LOG_CATEGORY);
         }
 
-        return $response->getContent();
+        // Note: according to the Guzzle documentation there should be a `$response->json()` method but I suspect that
+        // because the API is returning a `Content-Type: application/vnd.api+json` header it's not working as expected
+        $responseBody = (string) $response->getBody();
+
+        return json_decode($responseBody, true);
     }
 
-    private function getApiClient(): ?HttpClientInterface
+    private function getApiClient(): ?Client
     {
         if ($this->client === null) {
             /** @var Settings $settings */
@@ -266,23 +279,14 @@ class ImgixService extends ServiceLocator
             if ($settings->purgeApiKey) {
                 $clientOptions = [
                     'base_uri' => $settings->apiBaseUri ?: 'https://api.imgix.com/',
-                    'timeout' => 100,
+                    'timeout' => 10,
                     'headers' => [
                         'Accept' => 'application/json',
                         'Authorization' => "Bearer " . $settings->purgeApiKey,
                     ],
                 ];
 
-                $this->client = new RetryableHttpClient(
-                    HttpClient::create($clientOptions),
-                    new GenericRetryStrategy([
-                        500,
-                        502,
-                        503,
-                        504,
-                        429
-                    ])
-                );
+                $this->client = Craft::createGuzzleClient($clientOptions);
             }
         }
 
