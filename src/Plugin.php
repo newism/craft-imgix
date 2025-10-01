@@ -3,6 +3,7 @@
 namespace Newism\Imgix;
 
 use Craft;
+use craft\base\Element;
 use craft\base\Event;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
@@ -10,11 +11,14 @@ use craft\elements\Asset;
 use craft\events\DefineAssetUrlEvent;
 use craft\events\DefineBehaviorsEvent;
 use craft\events\DefineFieldsEvent;
+use craft\events\DefineMenuItemsEvent;
 use craft\events\ModelEvent;
+use craft\events\RegisterElementActionsEvent;
 use craft\log\MonologTarget;
 use craft\models\ImageTransform;
 use Monolog\Formatter\LineFormatter;
 use Newism\Imgix\behaviors\ImageTransformBehavior;
+use Newism\Imgix\elements\actions\PurgeImgixAsset;
 use Newism\Imgix\jobs\PurgeAssetImgixCache;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\services\ImgixService;
@@ -127,31 +131,11 @@ class Plugin extends BasePlugin
             return;
         }
 
-        // DRY function to add a purge job to the queue
-        $addPurgeJob = function ($url) {
-            $newUrl = strtok($url, '?');
-            $newJob = new PurgeAssetImgixCache([
-                'assetUrl' => $newUrl,
-            ]);
-            // Blitz runs at priority 10 so we need to run this at a higher priority via a lower integer
-            \Craft::$app->queue->priority(4)->push($newJob);
-        };
-
-        // DRY function to check if the asset's volume is configured for purging
-        $assetVolumeCanBePurged = function (Asset $asset) {
-            $assetUrl = (string) $asset->getUrl();
-            $volumeSettings = Plugin::$plugin->imgix->getSettingsForVolume($asset->getVolume());
-            $isEnabled = $volumeSettings['enabled'];
-            $domainMatches = $assetUrl && str_contains($assetUrl, $volumeSettings['imgixDomain']);
-
-            return $isEnabled && $domainMatches;
-        };
-
         // Check if the asset has changed in a relevant way and queue it to be purged
         Event::on(
             Asset::class,
             Asset::EVENT_BEFORE_SAVE,
-            function (ModelEvent $event) use ($assetVolumeCanBePurged) {
+            function (ModelEvent $event) {
                 /** @var Asset $asset */
                 $asset = $event->sender;
 
@@ -173,7 +157,7 @@ class Plugin extends BasePlugin
                     $this->assetsToPurge[$asset->id] = [];
 
                     // Check that the current asset volume is configured for purging and the domain matches
-                    if ($assetVolumeCanBePurged($asset)) {
+                    if (static::assetVolumeCanBePurged($asset)) {
                         // Queue the current asset URL to be purged later as this will be the old location if a move
                         // occurs  and we still want to purge this location if the file is replaced later
                         $this->assetsToPurge[$asset->id][] = $asset->getUrl();
@@ -186,7 +170,7 @@ class Plugin extends BasePlugin
         Event::on(
             Asset::class,
             Asset::EVENT_AFTER_SAVE,
-            function (ModelEvent $event) use ($addPurgeJob, $assetVolumeCanBePurged) {
+            function (ModelEvent $event) {
                 /** @var Asset $asset */
                 $asset = $event->sender;
 
@@ -196,7 +180,7 @@ class Plugin extends BasePlugin
                     $latestAssetUrl = $asset->getUrl();
                     if (!in_array($latestAssetUrl, $this->assetsToPurge[$asset->id], true)) {
                         // Check that the current asset volume is configured for purging and the domain matches
-                        if ($assetVolumeCanBePurged($asset)) {
+                        if (static::assetVolumeCanBePurged($asset)) {
                             // Purge the asset URL as its an Imgix URL
                             $this->assetsToPurge[$asset->id][] = $latestAssetUrl;
                         }
@@ -204,7 +188,7 @@ class Plugin extends BasePlugin
 
                     // Add a purge job for each URL in the array
                     foreach ($this->assetsToPurge[$asset->id] as $assetUrl) {
-                        $addPurgeJob($assetUrl);
+                        static::addPurgeJob($assetUrl);
                     }
 
                     // Remove the asset from the queue so it doesn't get purged again
@@ -217,20 +201,93 @@ class Plugin extends BasePlugin
         Event::on(
             Asset::class,
             Asset::EVENT_AFTER_DELETE,
-            function (\yii\base\Event $event) use ($addPurgeJob, $assetVolumeCanBePurged) {
+            function (\yii\base\Event $event) {
                 /** @var Asset $asset */
                 $asset = $event->sender;
 
                 // Check that the current asset volume is configured for purging and the domain matches
-                if ($assetVolumeCanBePurged($asset)) {
-                    $addPurgeJob($asset->getUrl());
+                if (static::assetVolumeCanBePurged($asset)) {
+                    static::addPurgeJob($asset->getUrl());
                 }
             }
         );
+
+        // Add an action to manually purge the imgix cache for selected assets from the Assets index page
+        Event::on(
+            Asset::class,
+            Asset::EVENT_REGISTER_ACTIONS,
+            function (RegisterElementActionsEvent $event) {
+                $event->actions[] = PurgeImgixAsset::class;
+            }
+        );
+
+        // Add an action for the Asset edit page to manually purge the imgix cache for selected assets
+        Event::on(
+            Asset::class,
+            Asset::EVENT_DEFINE_ACTION_MENU_ITEMS,
+            function (DefineMenuItemsEvent $event) {
+                $purgeId = sprintf('action-purge-imgix-%s', mt_rand());
+                $view = Craft::$app->getView();
+                $event->items[] = [
+                    'id' => $purgeId,
+                    'icon' => 'cloud-minus',
+                    'label' => 'Purge Imgix Asset',
+                ];
+
+                // This will create a Craft form with the asset ID and redirect back to the asset edit page
+                $view->registerJsWithVars(fn($id) => <<<JS
+(() => {
+  const btn = $('#' + $id);
+  btn.on('activate', () => {
+    const elementId = btn.closest('.menu').data('disclosureMenu').\$trigger
+      .closest('form').data('elementEditor').settings.elementId;
+    const form = Craft.createForm()
+      .addClass('hidden')
+      .append(Craft.getCsrfInput())
+      .appendTo(Garnish.\$bod);
+
+    Craft.submitForm(form, {
+      action: 'newism-imgix/purge',
+      params: {
+        elementId,
+      },
+    });
+  });
+})();
+JS, [
+                    $view->namespaceInputId($purgeId),
+                ]);
+            }
+        );
+
     }
 
     protected function createSettingsModel(): Settings
     {
         return new Settings();
     }
+
+    // DRY function to add a purge job to the queue
+    public static function addPurgeJob(string $url): void
+    {
+        $newUrl = strtok($url, '?');
+        $newJob = new PurgeAssetImgixCache([
+            'assetUrl' => $newUrl,
+        ]);
+        // Blitz runs at priority 10 so we need to run this at a higher priority via a lower integer
+        \Craft::$app->queue->priority(4)->push($newJob);
+    }
+
+    // DRY function to check if the asset's volume is configured for purging
+    public static function assetVolumeCanBePurged(Asset $asset): bool
+    {
+        $assetUrl = (string) $asset->getUrl();
+        $volumeSettings = Plugin::$plugin->imgix->getSettingsForVolume($asset->getVolume());
+        $isEnabled = $volumeSettings['enabled'];
+        $domainMatches = $assetUrl && str_contains($assetUrl, $volumeSettings['imgixDomain']);
+
+        return $isEnabled && $domainMatches;
+    }
+
+
 }
