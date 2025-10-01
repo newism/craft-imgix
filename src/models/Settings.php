@@ -14,5 +14,8 @@ class Settings extends Model
     public ?string $imgixDomain = null;
     public array $imgixDefaultParams = [];
     public string $signingKey = '';
+    public string $apiBaseUri = '';
+    public string $purgeApiKey = '';
+    public bool $debugLogging = true;
     public array $volumes = [];
 }
