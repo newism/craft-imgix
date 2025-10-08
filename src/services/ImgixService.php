@@ -7,6 +7,7 @@ use craft\elements\Asset;
 use craft\fs\Temp;
 use craft\helpers\Assets;
 use craft\helpers\ImageTransforms;
+use craft\helpers\UrlHelper;
 use craft\models\Volume;
 use Imgix\UrlBuilder;
 use Newism\Imgix\models\Settings;
@@ -18,6 +19,24 @@ class ImgixService extends ServiceLocator
     public function getPlaceholderSVG(string $width, string $height): string
     {
         return 'data:image/svg+xml;charset=utf-8,' . rawurlencode("<svg xmlns='http://www.w3.org/2000/svg' width='$width' height='$height' style='background: transparent' />");
+    }
+
+    public function generateDownloadSignature(Asset $asset): string
+    {
+        $signatureString = implode('|', [
+            $asset->id,
+            $asset->getPath(),
+        ]);
+        $signature = Craft::$app->getSecurity()->hashData($signatureString);
+
+        return base64_encode($signature);
+    }
+
+    public function validateDownloadSignature(Asset $asset, string $signature): bool
+    {
+        $decodedSignature = base64_decode($signature);
+
+        return (bool) Craft::$app->getSecurity()->validateData($decodedSignature);
     }
 
     public function generateUrl(Asset $asset, mixed $transform = null): ?string
@@ -40,6 +59,18 @@ class ImgixService extends ServiceLocator
         $volumeSettings = $this->getSettingsForVolume($volume);
         if(!$volumeSettings->enabled) {
             return null;
+        }
+
+        // TODO add an imgix option to allow serving of original asset without transform
+
+        // has the serveNonImagesDirectly been set, there is no transform and is the asset a non-image?
+        if ($volumeSettings->serveNonImagesDirectly && !$transform && $asset->kind !== Asset::KIND_IMAGE) {
+            $downloadUrl = UrlHelper::actionUrl('newism-imgix/asset/download', [
+                'assetId' => $asset->id,
+                'assetPath' => $asset->getPath(),
+                'assetSignature' => $this->generateDownloadSignature($asset),
+            ]);
+            return $downloadUrl;
         }
 
         $defaultImgixParams = is_callable($volumeSettings->imgixDefaultParams)
@@ -190,6 +221,7 @@ class ImgixService extends ServiceLocator
             'enabled' => $settings->enabled,
             'imgixDomain' => $settings->imgixDomain,
             'signingKey' => $settings->signingKey,
+            'serveNonImagesDirectly' => $settings->serveNonImagesDirectly,
             'imgixDefaultParams' => $settings->imgixDefaultParams,
         ], $settings->volumes[$volume->handle] ?? []);
 

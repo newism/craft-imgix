@@ -9,7 +9,9 @@ use craft\elements\Asset;
 use craft\events\DefineAssetUrlEvent;
 use craft\events\DefineBehaviorsEvent;
 use craft\events\DefineFieldsEvent;
+use craft\events\RegisterUrlRulesEvent;
 use craft\models\ImageTransform;
+use craft\web\UrlManager;
 use Newism\Imgix\behaviors\ImageTransformBehavior;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\services\ImgixService;
@@ -50,6 +52,12 @@ class Plugin extends BasePlugin
             ]);
             Craft::$app->view->registerTwigExtension(new TwigExtension());
             $this->attachEventHandlers();
+
+            if (Craft::$app->getRequest()->getIsSiteRequest()) {
+                Event::on(UrlManager::class, UrlManager::EVENT_REGISTER_SITE_URL_RULES, function (RegisterUrlRulesEvent $event) {
+                    $event->rules['newism-imgix/asset/download'] = 'newism-imgix/asset/download';
+                });
+            }
         });
 
     }

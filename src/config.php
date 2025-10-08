@@ -12,6 +12,8 @@ return [
 
     'signingKey' => App::env('CRAFT_IMGIX_SIGNING_KEY') ?? '',
 
+    'serveNonImagesDirectly' => App::env('CRAFT_IMGIX_SERVE_NON_IMAGES_DIRECTLY') ?? false,
+
     // Default imgix parameters that will be applied to all images unless overridden.
     //'imgixDefaultParams' => [
     //    'auto' => 'format,compress',
@@ -23,6 +25,7 @@ return [
 //        'volume handle goes here' => [
 //             'devMode' => '',
 //             'enabled' => '',
+//             'serveNonImagesDirectly' => '',
 //             'imgixDomain' => '',
 //             'imgixDefaultParams' => [],
 //        ],
