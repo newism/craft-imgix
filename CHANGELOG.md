@@ -1,8 +1,9 @@
 # Release Notes for Imgix Asset Transformer for Craft CMS
 
-## Unreleased
+## 5.0.0-alpha.8 - 2025-10-14
 
 - Added: `skipTransform` config setting to skip imgix transforms for specific assets. Useful for excluding non-image assets like PDFs.
+- Added: Imgix purge functionlity triggered on Asset changes and manual element actions.
 
 ## 5.0.0-alpha.7 - 2025-09-22
 
