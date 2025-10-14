@@ -142,7 +142,8 @@ class Plugin extends BasePlugin
                         Asset::SCENARIO_CREATE,
                         Asset::SCENARIO_LIVE,
                         Asset::SCENARIO_FILEOPS,
-                        Asset::SCENARIO_MOVE
+                        Asset::SCENARIO_MOVE,
+                        Asset::SCENARIO_REPLACE,
                     ];
                     if (!in_array($asset->getScenario(), $relevantScenarios)) {
                         return;
