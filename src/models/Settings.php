@@ -9,13 +9,14 @@ use craft\base\Model;
  */
 class Settings extends Model
 {
+    public array $imgixDefaultParams = [];
+    public array $volumes = [];
+    public bool $debugLogging = true;
     public bool $devMode = false;
     public bool $enabled = true;
-    public ?string $imgixDomain = null;
-    public array $imgixDefaultParams = [];
-    public string $signingKey = '';
+    public mixed $skipTransform = false;
     public string $apiBaseUri = '';
+    public string $imgixDomain = '';
     public string $purgeApiKey = '';
-    public bool $debugLogging = true;
-    public array $volumes = [];
+    public string $signingKey = '';
 }
