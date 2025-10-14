@@ -22,6 +22,7 @@ class ImgixService extends ServiceLocator
 
     public function generateUrl(Asset $asset, mixed $transform = null): ?string
     {
+
         /**
          * Check for temp fs and return null if it is allowing Craft CMS to handle the transform
          */
@@ -42,9 +43,26 @@ class ImgixService extends ServiceLocator
             return null;
         }
 
-        $defaultImgixParams = is_callable($volumeSettings->imgixDefaultParams)
-            ? $volumeSettings->imgixDefaultParams($asset, $transform)
-            : ($volumeSettings->imgixDefaultParams ?? []);
+        $transform = ImageTransforms::normalizeTransform($transform);
+
+        $skipTransform = false;
+        if (isset($volumeSettings->skipTransform)) {
+            $skip = $volumeSettings->skipTransform;
+            $skipTransform = is_callable($skip)
+                ? $skip($asset, $transform)
+                : (bool)$skip;
+        }
+        if($skipTransform) {
+            return null;
+        }
+
+        $defaultImgixParams = [];
+        if (isset($volumeSettings->imgixDefaultParams)) {
+            $params = $volumeSettings->imgixDefaultParams;
+            $defaultImgixParams = is_callable($params)
+                ? $params($asset, $transform)
+                : (array)$params;
+        }
 
         $httpQueryParams = $defaultImgixParams;
 
@@ -53,7 +71,6 @@ class ImgixService extends ServiceLocator
         $httpQueryParams['fp-y'] = $cropPosition['y'] ?? null;
         $httpQueryParams['fp-debug'] = $volumeSettings->devMode ?: null;
 
-        $transform = ImageTransforms::normalizeTransform($transform);
 
         // If we have a transform we add the imgix params
         if ($transform) {
@@ -190,6 +207,7 @@ class ImgixService extends ServiceLocator
             'enabled' => $settings->enabled,
             'imgixDomain' => $settings->imgixDomain,
             'signingKey' => $settings->signingKey,
+            'skipTransform' => $settings->skipTransform,
             'imgixDefaultParams' => $settings->imgixDefaultParams,
         ], $settings->volumes[$volume->handle] ?? []);
 

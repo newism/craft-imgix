@@ -11,8 +11,9 @@ class Settings extends Model
 {
     public bool $devMode = false;
     public bool $enabled = true;
-    public ?string $imgixDomain = null;
+    public string $imgixDomain = '';
     public array $imgixDefaultParams = [];
     public string $signingKey = '';
+    public mixed $skipTransform = false;
     public array $volumes = [];
 }
