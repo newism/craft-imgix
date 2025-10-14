@@ -5,16 +5,22 @@ namespace Newism\Imgix\services;
 use Craft;
 use craft\elements\Asset;
 use craft\fs\Temp;
+use craft\helpers\App;
 use craft\helpers\Assets;
 use craft\helpers\ImageTransforms;
 use craft\models\Volume;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ClientException;
 use Imgix\UrlBuilder;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\Plugin;
+use Psr\Http\Message\ResponseInterface;
 use yii\di\ServiceLocator;
 
 class ImgixService extends ServiceLocator
 {
+    private ?Client $client = null;
+
     public function getPlaceholderSVG(string $width, string $height): string
     {
         return 'data:image/svg+xml;charset=utf-8,' . rawurlencode("<svg xmlns='http://www.w3.org/2000/svg' width='$width' height='$height' style='background: transparent' />");
@@ -22,12 +28,16 @@ class ImgixService extends ServiceLocator
 
     public function generateUrl(Asset $asset, mixed $transform = null): ?string
     {
-
         /**
          * Check for temp fs and return null if it is allowing Craft CMS to handle the transform
          */
         $volume = $asset->getVolume();
         $fs = $volume->getFs();
+
+        // If the volume doesn't have a URL we return null
+        if(!$fs->hasUrls) {
+            return null;
+        }
 
         // Version check for Craft 5
         if(version_compare(Craft::$app->getVersion(), '5', '>') && Assets::isTempUploadFs($fs)) {
@@ -206,11 +216,102 @@ class ImgixService extends ServiceLocator
             'devMode' => $settings->devMode,
             'enabled' => $settings->enabled,
             'imgixDomain' => $settings->imgixDomain,
+            'apiBaseUri' => $settings->apiBaseUri,
+            'purgeApiKey' => $settings->purgeApiKey,
             'signingKey' => $settings->signingKey,
+            'debugLogging' => $settings->debugLogging,
             'skipTransform' => $settings->skipTransform,
             'imgixDefaultParams' => $settings->imgixDefaultParams,
         ], $settings->volumes[$volume->handle] ?? []);
 
         return new Settings($volumeSettings);
+    }
+
+    public function purgeUrl(string $url): ?array
+    {
+        // If there is no client we return null
+        $client = $this->getApiClient();
+        if (empty($client)) {
+            return null;
+        }
+
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+        $debugLogging = (bool) $settings->debugLogging;
+        $parsedUrl = parse_url($url);
+        if ($parsedUrl === false || !isset($parsedUrl['path'])) {
+            return null;
+        }
+
+        // Remove the query params and build the full URL
+        $sanitisedUrl = rtrim(str_replace($parsedUrl['query'] ?? '', '', $url), '?');
+
+        $method = 'POST';
+        $uri = 'api/v1/purge';
+        $payload = [
+            'json' => [
+                'data' => [
+                    'attributes' => [
+                        'url' => $sanitisedUrl,
+                    ],
+                    'type' => 'purges',
+                ],
+            ],
+        ];
+
+        // Send the request to the imgix API
+        try {
+            $response = $client->request('POST', 'api/v1/purge', $payload);
+        } catch (ClientException $e) {
+            throw new \RuntimeException(sprintf(
+                'Error: %s %s returned %s: %s',
+                $method,
+                $uri,
+                $e->getResponse()?->getStatusCode(),
+                (string) $e->getResponse()?->getBody()
+            ));
+        }
+
+        // If logging is enabled we log the request and response for later reference
+        if ($debugLogging) {
+            // Use the `info` level as `debug` usually won't appear on a production site
+            Craft::info(sprintf(
+                "Purge: %s %s\nPayload: %s\nResponse (Code %s): %s",
+                $method,
+                $uri,
+                json_encode($payload),
+                $response->getStatusCode(),
+                (string) $response->getBody()
+            ), Plugin::DEBUG_LOG_CATEGORY);
+        }
+
+        // Note: according to the Guzzle documentation there should be a `$response->json()` method but I suspect that
+        // because the API is returning a `Content-Type: application/vnd.api+json` header it's not working as expected
+        $responseBody = (string) $response->getBody();
+
+        return json_decode($responseBody, true);
+    }
+
+    private function getApiClient(): ?Client
+    {
+        if ($this->client === null) {
+            /** @var Settings $settings */
+            $settings = Plugin::getInstance()->getSettings();
+            // Only create the client if we have a purgeApiKey
+            if ($settings->purgeApiKey) {
+                $clientOptions = [
+                    'base_uri' => $settings->apiBaseUri ?: 'https://api.imgix.com/',
+                    'timeout' => 10,
+                    'headers' => [
+                        'Accept' => 'application/json',
+                        'Authorization' => "Bearer " . $settings->purgeApiKey,
+                    ],
+                ];
+
+                $this->client = Craft::createGuzzleClient($clientOptions);
+            }
+        }
+
+        return $this->client;
     }
 }
