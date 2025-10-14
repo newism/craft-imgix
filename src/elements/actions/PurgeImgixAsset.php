@@ -10,7 +10,7 @@ class PurgeImgixAsset extends ElementAction
 {
     public static function displayName(): string
     {
-        return Craft::t('newism-imgix', 'Purge Imgix Asset');
+        return Craft::t('newism-imgix', 'Purge Imgix Cache');
     }
 
     public function getTriggerHtml(): ?string
@@ -37,22 +37,23 @@ class PurgeImgixAsset extends ElementAction
     public function performAction(Craft\elements\db\ElementQueryInterface $query): bool
     {
         $elements = $query->all();
-        $message = 'No assets could be purged. Ensure the assets are in a volume that can be purged.';
-        $purges = [];
-
+        $success = false;
         // Iterate through elements and add purge jobs for assets that can be purged
         foreach ($elements as $element) {
             if (Plugin::assetVolumeCanBePurged($element)) {
                 Plugin::addPurgeJob($element->getUrl());
-                $purges[] = $element->title;
+                $success = true;
             }
         }
-        if (!empty($purges)) {
-            $message = 'Imgix purge scheduled for: ' . implode(', ', $purges);
+
+        if($success) {
+            $this->setMessage(Craft::t('newism-imgix', 'Purge Job Created'));
         }
 
-        Craft::$app->getSession()->setNotice($message);
+        if(!$success) {
+            $this->setMessage(Craft::t('newism-imgix', 'No assets could be purged'));
+        }
 
-        return true;
+        return $success;
     }
 }

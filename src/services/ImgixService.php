@@ -28,12 +28,16 @@ class ImgixService extends ServiceLocator
 
     public function generateUrl(Asset $asset, mixed $transform = null): ?string
     {
-
         /**
          * Check for temp fs and return null if it is allowing Craft CMS to handle the transform
          */
         $volume = $asset->getVolume();
         $fs = $volume->getFs();
+
+        // If the volume doesn't have a URL we return null
+        if(!$fs->hasUrls) {
+            return null;
+        }
 
         // Version check for Craft 5
         if(version_compare(Craft::$app->getVersion(), '5', '>') && Assets::isTempUploadFs($fs)) {

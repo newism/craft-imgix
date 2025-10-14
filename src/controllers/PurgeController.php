@@ -18,22 +18,30 @@ class PurgeController extends Controller
         // Find the asset by the supplied ID
         $this->requirePostRequest();
         $elementId = Craft::$app->request->getParam('elementId');
-        $element = Asset::findOne(['id' => $elementId]);
+        $asset = Asset::findOne(['id' => $elementId]);
 
         // Throw an error if the asset is not found
-        if (!$element) {
-            Craft::error("Asset with id {$elementId} not found");
+        if (!$asset) {
+            return $this->asFailure(
+                Craft::t('app', "Asset with id: $elementId not found"),
+            );
         }
 
         // If the asset is in a volume that can be purged, add a purge job
-        if (Plugin::assetVolumeCanBePurged($element)) {
-            Plugin::addPurgeJob($element->getUrl());
-            Craft::$app->getSession()->setNotice('Imgix purge scheduled for: ' . $element->title);
+        if (Plugin::assetVolumeCanBePurged($asset)) {
+            Plugin::addPurgeJob($asset->getUrl());
+            return $this->asModelSuccess(
+                $asset,
+                Craft::t('app', 'Purge Job Created'),
+                'asset',
+            );
         }
 
-        // Redirect to the asset edit page
-        $url = $element->getCpEditUrl();
+        return $this->asModelFailure(
+            $asset,
+            Craft::t('app', 'Asset not eligible for purging'),
+            'asset',
+        );
 
-        return $this->redirect($url);
     }
 }
