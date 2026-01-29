@@ -191,10 +191,14 @@ class ImgixService extends ServiceLocator
         // Create a new builder with the imgixDomain
         $builder = new UrlBuilder($volumeSettings->imgixDomain, true, $volumeSettings->signingKey);
 
-        $filesystem = $asset->getVolume()->getFs();
-        $baseUrl = $filesystem->getRootUrl() ?? null;
-        $assetUrl = implode("", [$baseUrl, $asset->folderPath, $asset->filename]);
-        ['path' => $path] = parse_url($assetUrl);
+        $folderPath = $asset->folderPath ?? '';
+        $assetUrl = implode("", [
+            $this->buildImgixBaseUrl($volumeSettings->imgixDomain),
+            $folderPath,
+            $asset->filename,
+        ]);
+        $parsedUrl = parse_url($assetUrl);
+        $path = $parsedUrl['path'] ?? '/' . ltrim($folderPath . $asset->filename, '/');
 
         // Filter out null $httpQueryParams values
         $httpQueryParams = array_filter($httpQueryParams, fn($value) => $value !== null);
@@ -313,5 +317,12 @@ class ImgixService extends ServiceLocator
         }
 
         return $this->client;
+    }
+
+    private function buildImgixBaseUrl(string $domain): string
+    {
+        $normalisedDomain = preg_replace('#^https?://#i', '', $domain);
+
+        return sprintf('https://%s/', rtrim($normalisedDomain, '/'));
     }
 }
