@@ -7,9 +7,6 @@ Adds imgix powered asset transforms to Craft CMS:
 3. Use imgix for CP thumbnails
 4. Allows `.pdf` files to be rasterized and transformed (unlike Craft CMS transforms)
 
-The only thing you'll need to update is your [filesystem Base URL](https://craftcms.com/docs/5.x/reference/element-types/assets.html#filesystems)
-to use your imgix domain.
-
 ## Requirements
 
 This plugin requires Craft CMS 4.0.0 or later, and PHP 8.0.2 or later.
@@ -23,9 +20,6 @@ You can install this plugin with Composer.
 ```shell
 composer require newism/craft-imgix -w && php craft plugin/install newism-imgix
 ```
-
-Then update your [filesystem Base URL](https://craftcms.com/docs/5.x/reference/element-types/assets.html#filesystems)
-to use your imgix domain.
 
 ## Configuration
 
