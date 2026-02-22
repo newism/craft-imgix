@@ -66,6 +66,12 @@ class ImgixService extends ServiceLocator
             return null;
         }
 
+        // If there's no transform, return null to use the original asset URL
+        // This ensures the "Link" column in the CP shows the untransformed URL
+        if (!$transform) {
+            return null;
+        }
+
         $defaultImgixParams = [];
         if (isset($volumeSettings->imgixDefaultParams)) {
             $params = $volumeSettings->imgixDefaultParams;
