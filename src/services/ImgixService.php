@@ -66,8 +66,7 @@ class ImgixService extends ServiceLocator
             return null;
         }
 
-        // If there's no transform, return null to use the original asset URL
-        // This ensures the "Link" column in the CP shows the untransformed URL
+        // Return null when no transform is applied to use the original asset URL
         if (!$transform) {
             return null;
         }
