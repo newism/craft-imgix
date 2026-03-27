@@ -3,8 +3,8 @@
 namespace Newism\Imgix\jobs;
 
 use craft\queue\BaseJob;
-use \Craft;
-use Newism\Imgix\Plugin;
+use Craft;
+use Newism\Imgix\Imgix;
 
 class PurgeAssetImgixCacheJob extends BaseJob
 {
@@ -13,15 +13,14 @@ class PurgeAssetImgixCacheJob extends BaseJob
     public function execute($queue): void
     {
         try {
-            Plugin::$plugin->imgix->purgeUrl($this->assetUrl);
+            Imgix::getInstance()->imgix->purgeUrl($this->assetUrl);
         } catch (\Throwable $e) {
-            // Log the error in the Plugin specific log and then re-throw it so the error appears on the job
             Craft::error(
                 Craft::t('newism-imgix', 'Could not purge Imgix cache url: {assetUrl} - {error}', [
                     'assetUrl' => $this->assetUrl,
                     'error' => $e->getMessage()
                 ]),
-                Plugin::DEBUG_LOG_CATEGORY
+                Imgix::DEBUG_LOG_CATEGORY
             );
 
             throw $e;

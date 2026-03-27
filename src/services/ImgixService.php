@@ -4,22 +4,24 @@ namespace Newism\Imgix\services;
 
 use Craft;
 use craft\elements\Asset;
-use craft\fs\Temp;
 use craft\helpers\App;
 use craft\helpers\Assets;
+use craft\helpers\FileHelper;
+use craft\helpers\Image;
 use craft\helpers\ImageTransforms;
 use craft\models\Volume;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use Imgix\UrlBuilder;
+use Newism\Imgix\Imgix;
 use Newism\Imgix\models\Settings;
-use Newism\Imgix\Plugin;
-use Psr\Http\Message\ResponseInterface;
+use Newism\Imgix\models\VolumeSettings;
 use yii\di\ServiceLocator;
 
 class ImgixService extends ServiceLocator
 {
     private ?Client $client = null;
+    private array $volumeSettingsCache = [];
 
     public function getPlaceholderSVG(string $width, string $height): string
     {
@@ -28,42 +30,28 @@ class ImgixService extends ServiceLocator
 
     public function generateUrl(Asset $asset, mixed $transform = null): ?string
     {
-        /**
-         * Check for temp fs and return null if it is allowing Craft CMS to handle the transform
-         */
         $volume = $asset->getVolume();
         $fs = $volume->getFs();
 
-        // If the volume doesn't have a URL we return null
-        if(!$fs->hasUrls) {
-            return null;
-        }
-
-        // Version check for Craft 5
-        if(version_compare(Craft::$app->getVersion(), '5', '>') && Assets::isTempUploadFs($fs)) {
-            return null;
-        }
-        // Version check for Craft 4 where Assets::isTempUploadFs doesn't exit
-        elseif(version_compare(Craft::$app->getVersion(), '4', '>') && ($fs instanceof Temp)) {
+        if (!$fs->hasUrls) {
             return null;
         }
 
         $volumeSettings = $this->getSettingsForVolume($volume);
-        if(!$volumeSettings->enabled) {
+        if (!$volumeSettings->enabled) {
             return null;
         }
 
         $transform = ImageTransforms::normalizeTransform($transform);
 
-        $skipTransform = false;
         if (isset($volumeSettings->skipTransform)) {
             $skip = $volumeSettings->skipTransform;
             $skipTransform = is_callable($skip)
                 ? $skip($asset, $transform)
-                : (bool)$skip;
-        }
-        if($skipTransform) {
-            return null;
+                : (bool) $skip;
+            if ($skipTransform) {
+                return null;
+            }
         }
 
         $defaultImgixParams = [];
@@ -71,115 +59,104 @@ class ImgixService extends ServiceLocator
             $params = $volumeSettings->imgixDefaultParams;
             $defaultImgixParams = is_callable($params)
                 ? $params($asset, $transform)
-                : (array)$params;
+                : (array) $params;
         }
 
         $httpQueryParams = $defaultImgixParams;
+        $sourceWidth = $asset->getWidth() ?? 0;
+        $sourceHeight = $asset->getHeight() ?? 0;
 
-        $cropPosition = $asset->getFocalPoint();
-        $httpQueryParams['fp-x'] = $cropPosition['x'] ?? null;
-        $httpQueryParams['fp-y'] = $cropPosition['y'] ?? null;
-        $httpQueryParams['fp-debug'] = $volumeSettings->devMode ?: null;
-
-
-        // If we have a transform we add the imgix params
         if ($transform) {
-            /*
-             * If ratio is defined we need to figure out the missing dimension and set it
-             * We then set the transform back on the asset so craft can recalculate the width and height
-             */
+            // Resolve ratio to concrete width/height
+            // We set these on the transform so Craft's _dimensions() returns correct values
+            // for {{ asset.width }} / {{ asset.height }}
             if (isset($transform->ratio) && \is_numeric($transform->ratio)) {
-
-                // If the transform has no width or height default to width of the asset
-                // to calculate the transform
                 if (!$transform->width && !$transform->height) {
-                    $transform->width = $asset->getWidth();
+                    $transform->width = $sourceWidth;
                 }
 
-                if (isset($transform->width) && !isset($transform->height)) {
-                    $transform->height = round($transform->width / $transform->ratio);
-                    unset($transform->ratio);
-                } elseif (isset($transform->height) && !isset($transform->width)) {
-                    $transform->width = round($transform->height * $transform->ratio);
-                    unset($transform->ratio);
+                if ($transform->width && !$transform->height) {
+                    $transform->height = (int) round($transform->width / $transform->ratio);
+                } elseif ($transform->height && !$transform->width) {
+                    $transform->width = (int) round($transform->height * $transform->ratio);
                 }
             }
 
-            // Set a default fill so Craft CMS calculates the correct dimensions
+            $transformWidth = $transform->width;
+            $transformHeight = $transform->height;
+
             if ($transform->mode === 'letterbox') {
                 $transform->fill = $transform->fill ?: 'transparent';
             }
 
-            $asset->setTransform($transform);
-
-            // Convert the craft transform to a imgix fit
             $imgixFit = match ($transform->mode) {
                 'crop' => 'crop',
                 'fit' => 'clip',
-                'letterbox' => Craft::$app->config->general->upscaleImages ? 'fill' : 'fillmax',
+                'letterbox' => $transform->upscale ? 'fill' : 'fillmax',
                 'stretch' => 'scale',
-                default => $transform->mode
+                // Capture any non-standard transform modes
+                default => $transform->mode,
             };
 
-            // Set the params
+            // Use Craft's dimension calculation to respect upscale settings
+            [$targetWidth, $targetHeight] = ($sourceWidth && $sourceHeight)
+                ? Image::targetDimensions($sourceWidth, $sourceHeight, $transformWidth, $transformHeight, $transform->mode, $transform->upscale)
+                : [$transformWidth, $transformHeight];
+
             $httpQueryParams = array_merge($httpQueryParams, [
-                'w' => $transform->width,
-                'h' => $transform->height,
-                // Fall back the quality to the default image quality as per the Craft CMS docs
-                // https://craftcms.com/docs/5.x/development/image-transforms.html#possible-values
+                'w' => $targetWidth,
+                'h' => $targetHeight,
                 'q' => $transform->quality ?: Craft::$app->config->general->defaultImageQuality,
-                'fm' => $transform->format ?: $httpQueryParams['fm'] ?? null,
+                'fm' => $transform->format ?: ($httpQueryParams['fm'] ?? null),
                 'fit' => $imgixFit,
             ]);
 
-            // If the mode is letterbox we need to set the fill color
             if ($transform->mode === 'letterbox') {
                 $httpQueryParams['fill'] = 'blur';
                 $httpQueryParams['fill-color'] = $transform->fill;
             }
 
-            // If the mode is 'crop' we need to set the focal point
+            // Focal points only apply to crop mode
             if ($transform->mode === 'crop') {
                 if ($asset->getHasFocalPoint()) {
-                    $cropPosition = $asset->getFocalPoint();
-                } elseif (!preg_match('/^(top|center|bottom)-(left|center|right)$/', $transform->position)) {
-                    $cropPosition = 'center-center';
+                    $focalPoint = $asset->getFocalPoint();
+                    $httpQueryParams['fp-x'] = $focalPoint['x'];
+                    $httpQueryParams['fp-y'] = $focalPoint['y'];
                 } else {
-                    $cropPosition = $transform->position;
-                }
+                    $position = preg_match('/^(top|center|bottom)-(left|center|right)$/', $transform->position)
+                        ? $transform->position
+                        : 'center-center';
 
-                if (is_array($cropPosition)) {
-                    $httpQueryParams['fp-x'] = $cropPosition['x'];
-                    $httpQueryParams['fp-y'] = $cropPosition['y'];
-                } else {
-                    [$verticalPosition, $horizontalPosition] = explode('-', $cropPosition);
+                    [$verticalPosition, $horizontalPosition] = explode('-', $position);
                     $httpQueryParams['fp-x'] = match ($horizontalPosition) {
                         'left' => 0,
                         'center' => 0.5,
                         'right' => 1,
+                        default => 0.5,
                     };
                     $httpQueryParams['fp-y'] = match ($verticalPosition) {
                         'top' => 0,
                         'center' => 0.5,
                         'bottom' => 1,
+                        default => 0.5,
                     };
+                }
+
+                if ($volumeSettings->devMode) {
+                    $httpQueryParams['fp-debug'] = true;
                 }
             }
 
-            // Merge the default imgix params with the transform imgix params
             $httpQueryParams = array_merge($httpQueryParams, $transform->imgix ?? []);
 
-            // If devMode is enabled we overlay the transform information on the image
             if ($volumeSettings->devMode) {
-                $httpQueryParams['text-size'] = 18;
+                $httpQueryParams['txt-size'] = 18;
                 $httpQueryParams['txt-align'] = 'bottom,right';
                 $httpQueryParams['txt'] = "Craft: $transform->mode / Imgix: $imgixFit";
             }
         }
 
-        // If we don't have a transform we check if the asset is a PDF
-        // If it is we bypass rasterization
-        // If it's not we apply the focal point if it exists
+        // Bypass rasterization for PDFs and SVGs when no transform is applied
         if (!$transform) {
             if (in_array($asset->mimeType, ['application/pdf', 'image/svg+xml'])) {
                 $httpQueryParams = [
@@ -188,15 +165,32 @@ class ImgixService extends ServiceLocator
             }
         }
 
-        // Create a new builder with the imgixDomain
         $builder = new UrlBuilder($volumeSettings->imgixDomain, true, $volumeSettings->signingKey);
 
-        $filesystem = $asset->getVolume()->getFs();
-        $baseUrl = $filesystem->getRootUrl() ?? null;
-        $assetUrl = implode("", [$baseUrl, $asset->folderPath, $asset->filename]);
-        ['path' => $path] = parse_url($assetUrl);
+        $pathParts = [];
 
-        // Filter out null $httpQueryParams values
+        if (!empty($volumeSettings->subPath)) {
+            $pathParts[] = trim($volumeSettings->subPath, '/');
+        }
+
+        if ($volumeSettings->includeFilesystemSubfolder && property_exists($fs, 'subfolder')) {
+            $subfolder = App::parseEnv($fs->subfolder);
+            if ($subfolder) {
+                $pathParts[] = trim($subfolder, '/');
+            }
+        }
+
+        $subpath = $volume->getSubpath(ensureTrailing: false, parse: true);
+        if ($subpath) {
+            $pathParts[] = $subpath;
+        }
+
+        $pathParts[] = $asset->getPath();
+
+        $path = '/' . implode('/', array_filter($pathParts));
+        $path = FileHelper::normalizePath($path);
+        $path = str_replace('\\', '/', $path);
+
         $httpQueryParams = array_filter($httpQueryParams, fn($value) => $value !== null);
         $url = $builder->createURL($path, $httpQueryParams);
 
@@ -209,45 +203,42 @@ class ImgixService extends ServiceLocator
 
     public function getSettingsForVolume(Volume $volume): Settings
     {
+        if (isset($this->volumeSettingsCache[$volume->handle])) {
+            return $this->volumeSettingsCache[$volume->handle];
+        }
+
         /** @var Settings $settings */
-        $settings = Plugin::getInstance()->getSettings();
+        $settings = Imgix::getInstance()->getSettings();
+        $volumeOverrides = $settings->volumes[$volume->handle] ?? [];
 
-        $volumeSettings = array_merge([
-            'devMode' => $settings->devMode,
-            'enabled' => $settings->enabled,
-            'imgixDomain' => $settings->imgixDomain,
-            'apiBaseUri' => $settings->apiBaseUri,
-            'purgeApiKey' => $settings->purgeApiKey,
-            'signingKey' => $settings->signingKey,
-            'debugLogging' => $settings->debugLogging,
-            'skipTransform' => $settings->skipTransform,
-            'imgixDefaultParams' => $settings->imgixDefaultParams,
-        ], $settings->volumes[$volume->handle] ?? []);
+        if ($volumeOverrides instanceof VolumeSettings) {
+            $volumeOverrides = array_filter($volumeOverrides->toArray(), fn($v) => $v !== null);
+        }
 
-        return new Settings($volumeSettings);
+        // Preserve callable properties that don't survive toArray()
+        $baseArray = $settings->toArray();
+        $baseArray['skipTransform'] = $settings->skipTransform;
+        $baseArray['imgixDefaultParams'] = $settings->imgixDefaultParams;
+
+        return $this->volumeSettingsCache[$volume->handle] = new Settings(array_merge($baseArray, $volumeOverrides));
     }
 
     public function purgeUrl(string $url): ?array
     {
-        // If there is no client we return null
         $client = $this->getApiClient();
         if (empty($client)) {
             return null;
         }
 
         /** @var Settings $settings */
-        $settings = Plugin::getInstance()->getSettings();
-        $debugLogging = (bool) $settings->debugLogging;
+        $settings = Imgix::getInstance()->getSettings();
         $parsedUrl = parse_url($url);
         if ($parsedUrl === false || !isset($parsedUrl['path'])) {
             return null;
         }
 
-        // Remove the query params and build the full URL
-        $sanitisedUrl = rtrim(str_replace($parsedUrl['query'] ?? '', '', $url), '?');
+        $sanitisedUrl = strtok($url, '?') ?: $url;
 
-        $method = 'POST';
-        $uri = 'api/v1/purge';
         $payload = [
             'json' => [
                 'data' => [
@@ -259,56 +250,42 @@ class ImgixService extends ServiceLocator
             ],
         ];
 
-        // Send the request to the imgix API
         try {
             $response = $client->request('POST', 'api/v1/purge', $payload);
         } catch (ClientException $e) {
             throw new \RuntimeException(sprintf(
-                'Error: %s %s returned %s: %s',
-                $method,
-                $uri,
-                $e->getResponse()?->getStatusCode(),
-                (string) $e->getResponse()?->getBody()
+                'Error: POST api/v1/purge returned %s: %s',
+                $e->getResponse()->getStatusCode(),
+                (string) $e->getResponse()->getBody()
             ));
         }
 
-        // If logging is enabled we log the request and response for later reference
-        if ($debugLogging) {
-            // Use the `info` level as `debug` usually won't appear on a production site
+        if ($settings->debugLogging) {
             Craft::info(sprintf(
-                "Purge: %s %s\nPayload: %s\nResponse (Code %s): %s",
-                $method,
-                $uri,
+                "Purge: POST api/v1/purge\nPayload: %s\nResponse (Code %s): %s",
                 json_encode($payload),
                 $response->getStatusCode(),
                 (string) $response->getBody()
-            ), Plugin::DEBUG_LOG_CATEGORY);
+            ), Imgix::DEBUG_LOG_CATEGORY);
         }
 
-        // Note: according to the Guzzle documentation there should be a `$response->json()` method but I suspect that
-        // because the API is returning a `Content-Type: application/vnd.api+json` header it's not working as expected
-        $responseBody = (string) $response->getBody();
-
-        return json_decode($responseBody, true);
+        return json_decode((string) $response->getBody(), true);
     }
 
     private function getApiClient(): ?Client
     {
         if ($this->client === null) {
             /** @var Settings $settings */
-            $settings = Plugin::getInstance()->getSettings();
-            // Only create the client if we have a purgeApiKey
+            $settings = Imgix::getInstance()->getSettings();
             if ($settings->purgeApiKey) {
-                $clientOptions = [
+                $this->client = Craft::createGuzzleClient([
                     'base_uri' => $settings->apiBaseUri ?: 'https://api.imgix.com/',
                     'timeout' => 10,
                     'headers' => [
                         'Accept' => 'application/json',
                         'Authorization' => "Bearer " . $settings->purgeApiKey,
                     ],
-                ];
-
-                $this->client = Craft::createGuzzleClient($clientOptions);
+                ]);
             }
         }
 

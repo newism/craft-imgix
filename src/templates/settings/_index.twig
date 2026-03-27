@@ -1,0 +1,245 @@
+{% css %}
+.imgix-settings .handle-badge {
+    font-size: 0.75em;
+    font-weight: normal;
+    padding: 2px 6px;
+    background: var(--gray-050);
+    border-radius: 3px;
+}
+.imgix-settings .edit-link {
+    font-size: 0.85em;
+    font-weight: normal;
+}
+{% endcss %}
+
+{% macro settingsTable(rows, errors) %}
+    <table class="data editable">
+        <thead>
+            <tr>
+                <th>Property</th>
+                <th>ENV var</th>
+                <th>Resolved value</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                {% set property = row[0] %}
+                {% set envVar = row[1] %}
+                {% set value = row[2] %}
+                {% set hasError = property in (errors|keys) %}
+                <tr>
+                    <td>
+                        <span class="status {{ hasError ? 'off' : 'on' }}"></span>
+                        <code>{{ property }}</code>
+                    </td>
+                    <td><code>{{ envVar }}</code></td>
+                    <td>{{ value ?? '&mdash;' }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endmacro %}
+
+<div class="imgix-settings">
+
+{% if errors|length %}
+    <ul class="errors">
+        {% for attribute, messages in errors %}
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        {% endfor %}
+    </ul>
+    <hr>
+{% endif %}
+
+<h2>Settings</h2>
+<p class="light">
+    Managed via <code>{{ configFilePath }}</code> and <code>CRAFT_IMGIX_*</code> environment variables.
+    {% if not configFileExists %}
+        <br><span class="status off"></span> <strong>Config file not found.</strong>
+        Copy the default: <code>cp vendor/newism/craft-imgix/src/config.php config/newism-imgix.php</code>
+    {% endif %}
+</p>
+{{ _self.settingsTable(config, errors) }}
+<p class="light">
+    <a href="https://github.com/newism/craft-imgix#configuration" target="_blank" rel="noopener">Configuration documentation</a>
+</p>
+
+<hr>
+
+<h2>Volume Overrides</h2>
+<p class="light">Per-volume settings override the global values above. Configure in <code>config/newism-imgix.php</code> under the <code>volumes</code> key.</p>
+{% if volumeData|length %}
+    {% for handle, overrides in volumeData %}
+        <h3><code>{{ handle }}</code></h3>
+        <table class="data editable">
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key, value in overrides %}
+                    <tr>
+                        <td><code>{{ key }}</code></td>
+                        <td>
+                            {% if value is same as(true) %}
+                                true
+                            {% elseif value is same as(false) %}
+                                false
+                            {% elseif value is iterable %}
+                                <code>{{ value|json_encode }}</code>
+                            {% else %}
+                                {{ value ?? '&mdash;' }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endfor %}
+{% else %}
+    <p class="light">None configured. All volumes use the global settings above.</p>
+{% endif %}
+
+<hr>
+
+<h2>Volume Debug</h2>
+<p class="light">
+    Shows how imgix paths are constructed for each volume.
+    The path is built from: filesystem subfolder + volume subpath + asset path.
+</p>
+
+{% for handle, debug in volumePathDebug %}
+    <div class="pane">
+    <h3>{{ debug.volume.name }} <span class="light code handle-badge">{{ handle }}</span></h3>
+
+    <h4>Filesystem <a href="#" class="edit-link imgix-edit-fs" data-handle="{{ debug.filesystem.handle }}">{{ "Edit"|t('app') }}</a></h4>
+    <table class="data editable">
+        <tbody>
+            <tr>
+                <td>Type</td>
+                <td><code>{{ debug.filesystem.type }}</code></td>
+            </tr>
+            <tr>
+                <td>Base URL</td>
+                <td><code style="word-break: break-all;">{{ debug.filesystem.baseUrl ?: '(none)' }}</code></td>
+            </tr>
+            {% if debug.filesystem.subfolder is not null %}
+            <tr>
+                <td>Subfolder</td>
+                <td>{% if debug.filesystem.subfolder %}<code>{{ debug.filesystem.subfolder }}</code>{% else %}&mdash;{% endif %}</td>
+            </tr>
+            {% endif %}
+            {% if debug.filesystem.addSubfolderToRootUrl is not null %}
+            <tr>
+                <td>Add subfolder to Base URL</td>
+                <td>{{ debug.filesystem.addSubfolderToRootUrl ? 'yes' : 'no' }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td>Root URL</td>
+                <td><code style="word-break: break-all;">{{ debug.filesystem.rootUrl ?: '(none)' }}</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>Volume <a href="#" class="edit-link imgix-edit-volume" data-id="{{ debug.volume.id }}">{{ "Edit"|t('app') }}</a></h4>
+    <table class="data editable">
+        <tbody>
+            <tr>
+                <td>Subpath</td>
+                <td>{% if debug.volume.subpath %}<code>{{ debug.volume.subpath }}</code>{% else %}&mdash;{% endif %}</td>
+            </tr>
+            <tr>
+                <td>Root URL</td>
+                <td><code style="word-break: break-all;">{{ debug.volume.rootUrl ?: '(none)' }}</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>Imgix (resolved for this volume)</h4>
+    <table class="data editable">
+        <tbody>
+            <tr>
+                <td>{{ debug.imgix.labels.imgixDomain ?? 'Domain' }}</td>
+                <td><code>{{ debug.imgix.domain ?: '(not set)' }}</code></td>
+            </tr>
+            <tr>
+                <td>{{ debug.imgix.labels.enabled ?? 'Enabled' }}</td>
+                <td>{{ debug.imgix.enabled ? 'yes' : 'no' }}</td>
+            </tr>
+            <tr>
+                <td>{{ debug.imgix.labels.includeFilesystemSubfolder ?? 'Include Filesystem Subfolder' }}</td>
+                <td>{{ debug.imgix.includeFilesystemSubfolder ? 'yes' : 'no' }}</td>
+            </tr>
+            <tr>
+                <td>Sub Path</td>
+                <td>{% if debug.imgix.subPath %}<code>{{ debug.imgix.subPath }}</code>{% else %}&mdash;{% endif %}</td>
+            </tr>
+            <tr>
+                <td>{{ debug.imgix.labels.signingKey ?? 'Signing Key' }}</td>
+                <td>{{ debug.imgix.signingKey ? 'configured' : '&mdash;' }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {% if debug.sampleAssets|length %}
+        <h4>Sample Assets</h4>
+        <table class="data editable">
+            <thead>
+                <tr>
+                    <th>Asset</th>
+                    <th>Kind</th>
+                    <th>Skipped</th>
+                    <th>Output URL</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asset in debug.sampleAssets %}
+                    <tr>
+                        <td><code>{{ asset.path }}</code></td>
+                        <td>{{ asset.kind }}</td>
+                        <td>
+                            {% if asset.skipped %}
+                                <span class="status off"></span> yes
+                            {% else %}
+                                <span class="status on"></span> no
+                            {% endif %}
+                        </td>
+                        <td style="max-width: 400px;">
+                            {% if asset.transformedUrl %}
+                                <a href="{{ asset.transformedUrl }}" target="_blank" rel="noopener"><code style="font-size: 11px; word-break: break-all;">{{ asset.transformedUrl }}</code></a>
+                            {% else %}
+                                &mdash;
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="light">No assets in this volume.</p>
+    {% endif %}
+
+    </div>
+{% endfor %}
+
+</div>
+
+{% js %}
+$('.imgix-edit-fs').on('click', function(e) {
+    e.preventDefault();
+    new Craft.CpScreenSlideout('fs/edit', {
+        params: { handle: $(this).data('handle') },
+    });
+});
+$('.imgix-edit-volume').on('click', function(e) {
+    e.preventDefault();
+    new Craft.CpScreenSlideout('volumes/edit-volume', {
+        params: { volumeId: $(this).data('id') },
+    });
+});
+{% endjs %}

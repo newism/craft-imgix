@@ -4,7 +4,8 @@ namespace Newism\Imgix\elements\actions;
 
 use Craft;
 use craft\base\ElementAction;
-use Newism\Imgix\Plugin;
+use craft\elements\db\ElementQueryInterface;
+use Newism\Imgix\Imgix;
 
 class PurgeImgixAsset extends ElementAction
 {
@@ -13,47 +14,24 @@ class PurgeImgixAsset extends ElementAction
         return Craft::t('newism-imgix', 'Purge Imgix Cache');
     }
 
-    public function getTriggerHtml(): ?string
-    {
-        Craft::$app->getView()->registerJsWithVars(fn($type) => <<<JS
-            (() => {
-                new Craft.ElementActionTrigger({
-                    type: $type,
-
-                    // Whether this action should be available when multiple elements are selected
-                    bulk: true,
-
-                    // Return whether the action should be available depending on which elements are selected
-                    validateSelection: (selectedItems, elementIndex) => {
-                      return true;
-                    },
-                });
-            })();
-        JS, [static::class]);
-
-        return null;
-    }
-
-    public function performAction(Craft\elements\db\ElementQueryInterface $query): bool
+    public function performAction(ElementQueryInterface $query): bool
     {
         $elements = $query->all();
-        $success = false;
-        // Iterate through elements and add purge jobs for assets that can be purged
+        $purgedCount = 0;
+
         foreach ($elements as $element) {
-            if (Plugin::assetVolumeCanBePurged($element)) {
-                Plugin::addPurgeJob($element->getUrl());
-                $success = true;
+            if (Imgix::assetVolumeCanBePurged($element)) {
+                Imgix::addPurgeJob($element->getUrl());
+                $purgedCount++;
             }
         }
 
-        if($success) {
-            $this->setMessage(Craft::t('newism-imgix', 'Purge Job Created'));
+        if ($purgedCount > 0) {
+            $this->setMessage(Craft::t('newism-imgix', '{count} purge job(s) created', ['count' => $purgedCount]));
+        } else {
+            $this->setMessage(Craft::t('newism-imgix', 'No assets were eligible for purging'));
         }
 
-        if(!$success) {
-            $this->setMessage(Craft::t('newism-imgix', 'No assets could be purged'));
-        }
-
-        return $success;
+        return true;
     }
 }

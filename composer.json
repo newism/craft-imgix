@@ -1,6 +1,6 @@
 {
     "name": "newism/craft-imgix",
-    "description": "Imgix asset transforms for Craft CMS",
+    "description": "Imgix-powered asset transforms for Craft CMS",
     "license": "proprietary",
     "type": "craft-plugin",
     "keywords": [
@@ -19,11 +19,16 @@
     "support": {
         "email": "support@newism.com.au",
         "source": "https://github.com/newism/craft-imgix",
-        "docs": "https://github.com/newism/craft-imgix/blob/master/README.md"
+        "docs": "https://plugins.newism.com.au/imgix-asset-transformer"
     },
     "require": {
-        "craftcms/cms": "^4.0|^5.6.0",
+        "php": ">=8.2",
+        "craftcms/cms": "^5.6.0",
         "imgix/imgix-php": "^4.1"
+    },
+    "require-dev": {
+        "craftcms/ecs": "dev-main",
+        "craftcms/phpstan": "dev-main"
     },
     "autoload": {
         "psr-4": {
@@ -31,17 +36,22 @@
         }
     },
     "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2"
+        },
         "allow-plugins": {
             "yiisoft/yii2-composer": true,
             "craftcms/plugin-installer": true
-        },
-        "sort-packages": true
+        }
     },
     "extra": {
         "handle": "newism-imgix",
+        "class": "Newism\\Imgix\\Imgix",
         "name": "Imgix Asset Transformer",
         "developer": "Newism",
-        "developerUrl": "https://newism.com.au"
+        "developerUrl": "https://newism.com.au",
+        "documentationUrl": "https://plugins.newism.com.au/imgix-asset-transformer"
     },
     "scripts": {
         "check-cs": "ecs check --ansi",
