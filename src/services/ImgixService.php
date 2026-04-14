@@ -42,7 +42,14 @@ class ImgixService extends ServiceLocator
             return null;
         }
 
+        // Temporarily reset the transform to get the original source width ahd height
+        $asset->setTransform(null);
+        $sourceWidth = $asset->getWidth() ?? 0;
+        $sourceHeight = $asset->getHeight() ?? 0;
+
+        // Normalise and set the transform back on the asset.
         $transform = ImageTransforms::normalizeTransform($transform);
+        $asset->setTransform($transform);
 
         if (isset($volumeSettings->skipTransform)) {
             $skip = $volumeSettings->skipTransform;
@@ -63,8 +70,6 @@ class ImgixService extends ServiceLocator
         }
 
         $httpQueryParams = $defaultImgixParams;
-        $sourceWidth = $asset->getWidth() ?? 0;
-        $sourceHeight = $asset->getHeight() ?? 0;
 
         if ($transform) {
             // Resolve ratio to concrete width/height
