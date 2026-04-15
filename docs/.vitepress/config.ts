@@ -1,8 +1,10 @@
 import { defineConfig } from 'vitepress'
 import { configPlugin } from '../../../docs/plugins/configPlugin'
 import { consoleCommandPlugin } from '../../../docs/plugins/consoleCommandPlugin'
+import { head } from '../../../docs'
 
 export default defineConfig({
+  head,
   base: '/imgix-asset-transformer/',
   srcDir: '.',
   title: 'Imgix Asset Transformer',
