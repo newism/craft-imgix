@@ -51,14 +51,8 @@ class ImgixService extends ServiceLocator
         $transform = ImageTransforms::normalizeTransform($transform);
         $asset->setTransform($transform);
 
-        if (isset($volumeSettings->skipTransform)) {
-            $skip = $volumeSettings->skipTransform;
-            $skipTransform = is_callable($skip)
-                ? $skip($asset, $transform)
-                : (bool) $skip;
-            if ($skipTransform) {
-                return null;
-            }
+        if ($this->shouldSkipTransform($asset, $transform)) {
+            return null;
         }
 
         $defaultImgixParams = [];
@@ -228,6 +222,21 @@ class ImgixService extends ServiceLocator
         return $this->volumeSettingsCache[$volume->handle] = new Settings(array_merge($baseArray, $volumeOverrides));
     }
 
+    public function shouldSkipTransform(Asset $asset, mixed $transform = null): bool
+    {
+        $volumeSettings = $this->getSettingsForVolume($asset->getVolume());
+
+        if (!isset($volumeSettings->skipTransform)) {
+            return false;
+        }
+
+        $skip = $volumeSettings->skipTransform;
+
+        return is_callable($skip)
+            ? (bool) $skip($asset, $transform)
+            : (bool) $skip;
+    }
+
     public function purgeUrl(string $url): ?array
     {
         $client = $this->getApiClient();
@@ -258,11 +267,17 @@ class ImgixService extends ServiceLocator
         try {
             $response = $client->request('POST', 'api/v1/purge', $payload);
         } catch (ClientException $e) {
-            throw new \RuntimeException(sprintf(
-                'Error: POST api/v1/purge returned %s: %s',
-                $e->getResponse()->getStatusCode(),
-                (string) $e->getResponse()->getBody()
-            ));
+            $statusCode = $e->getResponse()->getStatusCode();
+            $responseBody = (string) $e->getResponse()->getBody();
+
+            Craft::warning(sprintf(
+                'Skipping Imgix purge for %s after %s response: %s',
+                $sanitisedUrl,
+                $statusCode,
+                $responseBody
+            ), Imgix::DEBUG_LOG_CATEGORY);
+
+            return null;
         }
 
         if ($settings->debugLogging) {
