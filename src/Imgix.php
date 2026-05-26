@@ -125,7 +125,7 @@ class Imgix extends BasePlugin
                     if ($asset->newLocation) {
                         $this->assetsToPurge[$asset->id] = [];
 
-                        if (self::assetVolumeCanBePurged($asset)) {
+                        if (self::assetCanBePurged($asset)) {
                             $this->assetsToPurge[$asset->id][] = $asset->getUrl();
                         }
                     }
@@ -142,7 +142,7 @@ class Imgix extends BasePlugin
                     if (isset($this->assetsToPurge[$asset->id])) {
                         $latestAssetUrl = $asset->getUrl();
                         if (!in_array($latestAssetUrl, $this->assetsToPurge[$asset->id], true)) {
-                            if (self::assetVolumeCanBePurged($asset)) {
+                            if (self::assetCanBePurged($asset)) {
                                 $this->assetsToPurge[$asset->id][] = $latestAssetUrl;
                             }
                         }
@@ -163,7 +163,7 @@ class Imgix extends BasePlugin
                     /** @var Asset $asset */
                     $asset = $event->sender;
 
-                    if (self::assetVolumeCanBePurged($asset)) {
+                    if (self::assetCanBePurged($asset)) {
                         self::addPurgeJob($asset->getUrl());
                     }
                 }
@@ -364,5 +364,11 @@ class Imgix extends BasePlugin
         $volumeSettings = self::getInstance()->imgix->getSettingsForVolume($asset->getVolume());
 
         return $volumeSettings->enabled && !empty($volumeSettings->imgixDomain);
+    }
+
+    public static function assetCanBePurged(Asset $asset): bool
+    {
+        return self::assetVolumeCanBePurged($asset)
+            && !self::getInstance()->imgix->shouldSkipTransform($asset);
     }
 }

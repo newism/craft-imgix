@@ -20,7 +20,7 @@ class PurgeImgixAsset extends ElementAction
         $purgedCount = 0;
 
         foreach ($elements as $element) {
-            if (Imgix::assetVolumeCanBePurged($element)) {
+            if (Imgix::assetCanBePurged($element)) {
                 Imgix::addPurgeJob($element->getUrl());
                 $purgedCount++;
             }
