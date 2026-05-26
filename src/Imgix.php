@@ -163,7 +163,7 @@ class Imgix extends BasePlugin
                     /** @var Asset $asset */
                     $asset = $event->sender;
 
-                    if (self::assetCanBePurged($asset)) {
+                    if (self::assetVolumeCanBePurged($asset)) {
                         self::addPurgeJob($asset->getUrl());
                     }
                 }
