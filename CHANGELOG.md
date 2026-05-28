@@ -1,5 +1,11 @@
 # Release Notes for Imgix Asset Transformer for Craft CMS
 
+## 5.0.2 - 2026-05-28
+
+### Fixed
+
+- Imgix transforms use the `q` value defined in the global or volume-specific `imgixDefaultParams` settings
+
 ## 5.0.1 - 2026-04-14
 
 ### Fixed

@@ -111,7 +111,7 @@ class ImgixService extends ServiceLocator
             $httpQueryParams = array_merge($httpQueryParams, [
                 'w' => $targetWidth,
                 'h' => $targetHeight,
-                'q' => $transform->quality ?: Craft::$app->config->general->defaultImageQuality,
+                'q' => $transform->quality ?: ($httpQueryParams['q'] ?? Craft::$app->config->general->defaultImageQuality),
                 'fm' => $transform->format ?: ($httpQueryParams['fm'] ?? null),
                 'fit' => $imgixFit,
             ]);
