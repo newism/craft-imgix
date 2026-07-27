@@ -197,11 +197,12 @@ class ImgixService extends ServiceLocator
         $path = str_replace('\\', '/', $path);
 
         $httpQueryParams = array_filter($httpQueryParams, fn($value) => $value !== null);
-        $url = $builder->createURL($path, $httpQueryParams);
 
         if (Craft::$app->getConfig()->getGeneral()->revAssetUrls) {
-            $url = Assets::revUrl($url, $asset, $asset->dateUpdated);
+            $httpQueryParams = array_merge($httpQueryParams, Assets::revParams($asset, $asset->dateUpdated));
         }
+
+        $url = $builder->createURL($path, $httpQueryParams);
 
         return $url;
     }

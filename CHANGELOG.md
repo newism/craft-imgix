@@ -1,5 +1,11 @@
 # Release Notes for Imgix Asset Transformer for Craft CMS
 
+## 5.0.3 - 2026-07-27
+
+### Fixed
+
+- The `revAssetUrls` was being appended to the signed URL resulting in `sig_invalid` errors.
+
 ## 5.0.2 - 2026-05-28
 
 ### Fixed
