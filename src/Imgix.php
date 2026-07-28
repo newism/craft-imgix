@@ -7,11 +7,11 @@ use craft\base\Event;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
 use craft\elements\Asset;
+use craft\enums\Color;
 use craft\events\DefineAssetUrlEvent;
 use craft\events\DefineMenuItemsEvent;
 use craft\events\ModelEvent;
 use craft\events\RegisterElementActionsEvent;
-use craft\enums\Color;
 use craft\helpers\App;
 use craft\helpers\Assets;
 use craft\helpers\Cp;
@@ -25,6 +25,7 @@ use Newism\Imgix\models\Settings;
 use Newism\Imgix\services\ImgixService;
 use Newism\Imgix\web\twig\TwigExtension;
 use Psr\Log\LogLevel;
+use Throwable;
 
 /**
  * Imgix plugin
@@ -348,7 +349,7 @@ class Imgix extends BasePlugin
                 try {
                     $model->$name($value);
                     continue;
-                } catch (\Throwable) {
+                } catch (Throwable) {
                 }
             }
             $model->$name = $value;

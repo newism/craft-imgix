@@ -18,7 +18,9 @@ use Newism\Imgix\ImageTransform;
 use Newism\Imgix\Imgix;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\models\VolumeSettings;
+use RuntimeException;
 use yii\di\ServiceLocator;
+use function is_numeric;
 
 class ImgixService extends ServiceLocator
 {
@@ -102,7 +104,7 @@ class ImgixService extends ServiceLocator
             // Resolve ratio to concrete width/height
             // We set these on the transform so Craft's _dimensions() returns correct values
             // for {{ asset.width }} / {{ asset.height }}
-            if (isset($transform->ratio) && \is_numeric($transform->ratio)) {
+            if (isset($transform->ratio) && is_numeric($transform->ratio)) {
                 if (!$transform->width && !$transform->height) {
                     $transform->width = $sourceWidth;
                 }
@@ -193,7 +195,7 @@ class ImgixService extends ServiceLocator
         }
 
         // Bypass rasterization for PDFs and SVGs when nothing is being rendered
-            if ((!$transform || $renderOriginal) && in_array($asset->mimeType, ['application/pdf', 'image/svg+xml'])) {
+        if ((!$transform || $renderOriginal) && in_array($asset->mimeType, ['application/pdf', 'image/svg+xml'])) {
             // Without a transform the default params are dropped too, so the
             // original file is served rather than an optimised rasterization.
             if (!$transform) {
@@ -260,9 +262,14 @@ class ImgixService extends ServiceLocator
             $volumeSettingsModel = $volumeOverrides;
             $volumeOverrides = array_filter($volumeSettingsModel->toArray(), fn($v) => $v !== null);
 
-            // Callables don't survive toArray() — carry the raw value across
+            // Callables don't survive toArray() — carry the raw values across.
+            // skipTransform needs it too: the fluent setter forwards to skipImgix,
+            // but `new VolumeSettings(['skipTransform' => fn()])` sets it directly.
             if ($volumeSettingsModel->skipImgix !== null) {
                 $volumeOverrides['skipImgix'] = $volumeSettingsModel->skipImgix;
+            }
+            if ($volumeSettingsModel->skipTransform !== null) {
+                $volumeOverrides['skipTransform'] = $volumeSettingsModel->skipTransform;
             }
         }
 
@@ -311,7 +318,7 @@ class ImgixService extends ServiceLocator
         try {
             $response = $client->request('POST', 'api/v1/purge', $payload);
         } catch (ClientException $e) {
-            throw new \RuntimeException(sprintf(
+            throw new RuntimeException(sprintf(
                 'Error: POST api/v1/purge returned %s: %s',
                 $e->getResponse()->getStatusCode(),
                 (string)$e->getResponse()->getBody()

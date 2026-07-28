@@ -5,7 +5,10 @@ namespace Newism\Imgix\models;
 use Craft;
 use craft\attributes\EnvName;
 use craft\config\BaseConfig;
+use craft\elements\Asset;
+use craft\models\ImageTransform;
 use Newism\Imgix\Imgix;
+use Throwable;
 
 /**
  * newism-imgix settings
@@ -52,8 +55,7 @@ class Settings extends BaseConfig
         }
 
         if ($this->skipImgix === null) {
-            $this->skipImgix = fn(\craft\elements\Asset $asset, ?\craft\models\ImageTransform $transform = null) =>
-                $asset->kind !== 'image';
+            $this->skipImgix = fn(Asset $asset, ?ImageTransform $transform = null) => $asset->kind !== 'image';
         }
     }
 
@@ -73,7 +75,7 @@ class Settings extends BaseConfig
                 Craft::$app->getDeprecator()->log('newism-imgix:skipTransform', $message);
                 return;
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fall through to the log
         }
 
