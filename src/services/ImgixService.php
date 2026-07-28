@@ -10,9 +10,11 @@ use craft\helpers\FileHelper;
 use craft\helpers\Image;
 use craft\helpers\ImageTransforms;
 use craft\models\Volume;
+use DateTime;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use Imgix\UrlBuilder;
+use Newism\Imgix\ImageTransform;
 use Newism\Imgix\Imgix;
 use Newism\Imgix\models\Settings;
 use Newism\Imgix\models\VolumeSettings;
@@ -23,12 +25,29 @@ class ImgixService extends ServiceLocator
     private ?Client $client = null;
     private array $volumeSettingsCache = [];
 
+    /**
+     * Render a placeholder .svg of width and height
+     */
     public function getPlaceholderSVG(string $width, string $height): string
     {
         return 'data:image/svg+xml;charset=utf-8,' . rawurlencode("<svg xmlns='http://www.w3.org/2000/svg' width='$width' height='$height' style='background: transparent' />");
     }
 
-    public function generateUrl(Asset $asset, mixed $transform = null): ?string
+    /**
+     * Render the asset filesystem url, no transforms using the filesystem root url and path
+     */
+    public function filesystemUrl(Asset $asset, ?string $uri = null, ?DateTime $dateUpdated = null): string
+    {
+        return Assets::generateUrl($asset, $uri, $dateUpdated);
+    }
+
+    /**
+     * Generate the imgix url for an asset, with or without a transform.
+     *
+     * Returns null when imgix shouldn't handle this asset, so the caller can
+     * fall back to Craft's default URL generation.
+     */
+    public function getTransformUrl(Asset $asset, mixed $transform = null): ?string
     {
         $volume = $asset->getVolume();
         $fs = $volume->getFs();
@@ -42,36 +61,44 @@ class ImgixService extends ServiceLocator
             return null;
         }
 
-        // Temporarily reset the transform to get the original source width ahd height
-        $asset->setTransform(null);
-        $sourceWidth = $asset->getWidth() ?? 0;
-        $sourceHeight = $asset->getHeight() ?? 0;
-
         // Normalise and set the transform back on the asset.
         $transform = ImageTransforms::normalizeTransform($transform);
-        $asset->setTransform($transform);
 
-        if (isset($volumeSettings->skipTransform)) {
-            $skip = $volumeSettings->skipTransform;
-            $skipTransform = is_callable($skip)
+        if (isset($volumeSettings->skipImgix)) {
+            $skip = $volumeSettings->skipImgix;
+            $skipImgix = is_callable($skip)
                 ? $skip($asset, $transform)
-                : (bool) $skip;
-            if ($skipTransform) {
+                : (bool)$skip;
+
+            if ($skipImgix) {
                 return null;
             }
         }
 
+        // A transform with `renderOriginal` asks imgix to deliver the source file,
+        // so no default or calculated rendering params are applied.
+        $renderOriginal = $transform?->renderOriginal ?? false;
+
         $defaultImgixParams = [];
-        if (isset($volumeSettings->imgixDefaultParams)) {
+        if (!$renderOriginal && isset($volumeSettings->imgixDefaultParams)) {
             $params = $volumeSettings->imgixDefaultParams;
             $defaultImgixParams = is_callable($params)
                 ? $params($asset, $transform)
-                : (array) $params;
+                : (array)$params;
         }
 
         $httpQueryParams = $defaultImgixParams;
 
-        if ($transform) {
+        if ($renderOriginal) {
+            // Only `dl` survives — any other imgix param produces a rendered
+            // variant, which defeats the point of the flag.
+            $httpQueryParams = array_intersect_key($transform->imgix ?? [], ['dl' => true]);
+        } elseif ($transform) {
+            // Get the orginal width and height using a temp transform
+            $tempTransform = new ImageTransform();
+            $sourceWidth = $asset->getWidth($tempTransform) ?? 0;
+            $sourceHeight = $asset->getHeight($tempTransform) ?? 0;
+
             // Resolve ratio to concrete width/height
             // We set these on the transform so Craft's _dimensions() returns correct values
             // for {{ asset.width }} / {{ asset.height }}
@@ -81,14 +108,23 @@ class ImgixService extends ServiceLocator
                 }
 
                 if ($transform->width && !$transform->height) {
-                    $transform->height = (int) round($transform->width / $transform->ratio);
+                    $transform->height = (int)round($transform->width / $transform->ratio);
                 } elseif ($transform->height && !$transform->width) {
-                    $transform->width = (int) round($transform->height * $transform->ratio);
+                    $transform->width = (int)round($transform->height * $transform->ratio);
                 }
             }
 
-            $transformWidth = $transform->width;
-            $transformHeight = $transform->height;
+            // Use Craft's dimension calculation to respect upscale settings
+            [$targetWidth, $targetHeight] = ($sourceWidth && $sourceHeight)
+                ? Image::targetDimensions(
+                    $sourceWidth,
+                    $sourceHeight,
+                    $transform->width,
+                    $transform->height,
+                    $transform->mode,
+                    $transform->upscale
+                )
+                : [$transform->width, $transform->height];
 
             if ($transform->mode === 'letterbox') {
                 $transform->fill = $transform->fill ?: 'transparent';
@@ -102,11 +138,6 @@ class ImgixService extends ServiceLocator
                 // Capture any non-standard transform modes
                 default => $transform->mode,
             };
-
-            // Use Craft's dimension calculation to respect upscale settings
-            [$targetWidth, $targetHeight] = ($sourceWidth && $sourceHeight)
-                ? Image::targetDimensions($sourceWidth, $sourceHeight, $transformWidth, $transformHeight, $transform->mode, $transform->upscale)
-                : [$transformWidth, $transformHeight];
 
             $httpQueryParams = array_merge($httpQueryParams, [
                 'w' => $targetWidth,
@@ -161,16 +192,24 @@ class ImgixService extends ServiceLocator
             }
         }
 
-        // Bypass rasterization for PDFs and SVGs when no transform is applied
-        if (!$transform) {
-            if (in_array($asset->mimeType, ['application/pdf', 'image/svg+xml'])) {
-                $httpQueryParams = [
-                    'rasterize-bypass' => true
-                ];
+        // Bypass rasterization for PDFs and SVGs when nothing is being rendered
+            if ((!$transform || $renderOriginal) && in_array($asset->mimeType, ['application/pdf', 'image/svg+xml'])) {
+            // Without a transform the default params are dropped too, so the
+            // original file is served rather than an optimised rasterization.
+            if (!$transform) {
+                $httpQueryParams = [];
             }
+            $httpQueryParams['rasterize-bypass'] = 'true';
         }
 
-        $builder = new UrlBuilder($volumeSettings->imgixDomain, true, $volumeSettings->signingKey);
+        // `ixlib` identifies the SDK to imgix and is inert — it never triggers a
+        // re-encode, so it's left to the setting even under renderOriginal
+        $builder = new UrlBuilder(
+            $volumeSettings->imgixDomain,
+            true,
+            $volumeSettings->signingKey,
+            $volumeSettings->includeLibraryParam,
+        );
 
         $pathParts = [];
 
@@ -198,7 +237,7 @@ class ImgixService extends ServiceLocator
 
         $httpQueryParams = array_filter($httpQueryParams, fn($value) => $value !== null);
 
-        if (Craft::$app->getConfig()->getGeneral()->revAssetUrls) {
+        if (!$renderOriginal && Craft::$app->getConfig()->getGeneral()->revAssetUrls) {
             $httpQueryParams = array_merge($httpQueryParams, Assets::revParams($asset, $asset->dateUpdated));
         }
 
@@ -218,12 +257,25 @@ class ImgixService extends ServiceLocator
         $volumeOverrides = $settings->volumes[$volume->handle] ?? [];
 
         if ($volumeOverrides instanceof VolumeSettings) {
-            $volumeOverrides = array_filter($volumeOverrides->toArray(), fn($v) => $v !== null);
+            $volumeSettingsModel = $volumeOverrides;
+            $volumeOverrides = array_filter($volumeSettingsModel->toArray(), fn($v) => $v !== null);
+
+            // Callables don't survive toArray() — carry the raw value across
+            if ($volumeSettingsModel->skipImgix !== null) {
+                $volumeOverrides['skipImgix'] = $volumeSettingsModel->skipImgix;
+            }
+        }
+
+        // Normalise the deprecated key before merging, so a volume-level override
+        // beats the inherited global value rather than colliding with it in init()
+        if (isset($volumeOverrides['skipTransform'])) {
+            $volumeOverrides['skipImgix'] ??= $volumeOverrides['skipTransform'];
+            unset($volumeOverrides['skipTransform']);
         }
 
         // Preserve callable properties that don't survive toArray()
         $baseArray = $settings->toArray();
-        $baseArray['skipTransform'] = $settings->skipTransform;
+        $baseArray['skipImgix'] = $settings->skipImgix;
         $baseArray['imgixDefaultParams'] = $settings->imgixDefaultParams;
 
         return $this->volumeSettingsCache[$volume->handle] = new Settings(array_merge($baseArray, $volumeOverrides));
@@ -262,7 +314,7 @@ class ImgixService extends ServiceLocator
             throw new \RuntimeException(sprintf(
                 'Error: POST api/v1/purge returned %s: %s',
                 $e->getResponse()->getStatusCode(),
-                (string) $e->getResponse()->getBody()
+                (string)$e->getResponse()->getBody()
             ));
         }
 
@@ -271,11 +323,11 @@ class ImgixService extends ServiceLocator
                 "Purge: POST api/v1/purge\nPayload: %s\nResponse (Code %s): %s",
                 json_encode($payload),
                 $response->getStatusCode(),
-                (string) $response->getBody()
+                (string)$response->getBody()
             ), Imgix::DEBUG_LOG_CATEGORY);
         }
 
-        return json_decode((string) $response->getBody(), true);
+        return json_decode((string)$response->getBody(), true);
     }
 
     private function getApiClient(): ?Client

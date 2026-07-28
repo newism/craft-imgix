@@ -12,18 +12,19 @@ See the [Imgix blog post on SVG support](https://www.imgix.com/blog/announcing-s
 
 ## PDF Files
 
-By default, PDFs are skipped by `skipTransform` and served from your filesystem directly.
+By default, PDFs are skipped by `skipImgix` and served from your filesystem directly.
 
-If you override `skipTransform` to include PDFs, the plugin handles them as follows:
+If you override `skipImgix` to include PDFs, the plugin handles them as follows:
 
 - **No transform applied**: served with [`rasterize-bypass`](https://docs.imgix.com/en-US/apis/rendering/format/rasterize-bypass) set to `true` (original PDF unchanged via imgix CDN)
 - **Transform applied**: Imgix rasterizes the PDF and applies the transform, allowing image thumbnails of PDF pages
+- **[`renderOriginal: true`](./image-transforms.md#serving-the-original-file)**: also served with `rasterize-bypass`, so you can force a download of the original PDF while still using the Imgix CDN
 
 ```twig
 {# Serve original PDF (default: served from filesystem, not Imgix) #}
 <a href="{{ pdfAsset.url }}">Download PDF</a>
 
-{# To generate a thumbnail, skipTransform must allow PDFs through #}
+{# To generate a thumbnail, skipImgix must allow PDFs through #}
 {% do pdfAsset.setTransform({ width: 300 }) %}
 <img src="{{ pdfAsset.url }}" alt="PDF preview">
 ```

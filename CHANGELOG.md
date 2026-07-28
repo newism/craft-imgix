@@ -1,5 +1,23 @@
 # Release Notes for Imgix Asset Transformer for Craft CMS
 
+## 5.1.0 - 2026-07-28
+
+### Added
+
+- `{{ imgix.filesystemUrl(asset) }}` bypasses imgix completely and uses the filesystem url without any transforms. Use if the original image is required.
+- `renderOriginal: true` transform property serves the original file from the imgix CDN with no rendering parameters. `imgixDefaultParams`, all calculated params and `revAssetUrls` cache busting are skipped — `dl` is the only imgix param that still applies. Any other param, even one requesting the image's native width, sends the file through imgix's pipeline and re-encodes it.
+- `includeLibraryParam` config setting (default `true`) controls whether the imgix SDK's `ixlib` param is added to generated URLs. Set to `false` for bare URLs. `ixlib` has no effect on the image returned.
+
+### Changed
+
+- `skipTransform` has been renamed to `skipImgix`. It never skipped a *transform* — it skips imgix entirely and falls back to the filesystem URL. The old name still works but is deprecated, and support for it will be removed in 6.0.
+
+### Fixed
+
+- Control Panel images are now the correct size in preview and links
+- Transforms are no longer saved onto asset
+- Callable `skipImgix` values set via per-volume `VolumeSettings` are no longer lost when volume settings are merged, which silently disabled skipping for that volume
+
 ## 5.0.3 - 2026-07-27
 
 ### Fixed

@@ -12,7 +12,8 @@ Imgix-powered asset transforms for Craft CMS. A drop-in replacement for native i
 - **Per-volume configuration** — different Imgix sources per volume for multi-domain setups
 - **URL signing** — secure image delivery via `signingKey`
 - **Non-image assets skipped** — PDFs, documents, etc. are skipped by default to reduce Imgix costs
-- **PDF rasterization** — supported when enabled via `skipTransform`
+- **PDF rasterization** — supported when enabled via `skipImgix`
+- **Original file delivery** — serve the untouched source over the Imgix CDN with `renderOriginal`
 - **Placeholder SVG** — transparent SVG data URIs for CLS prevention
 - **Configuration debugging** — built-in settings page to verify your setup
 

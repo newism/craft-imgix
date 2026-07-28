@@ -115,26 +115,34 @@ Log purge API requests and responses to `storage/logs/newism-imgix.log`
 :::
 
 :::config
-setting: skipTransform
+setting: skipImgix
 type: callable|bool
 default: skips non-images
 ---
-A callback that receives the Asset and ImageTransform and returns `true` to skip Imgix and fall back to the filesystem URL.
+A callback that receives the Asset and ImageTransform and returns `true` to skip Imgix entirely and fall back to the filesystem URL.
 
 By default, non-image assets (`$asset->kind !== 'image'`) are skipped to avoid unnecessary [Imgix delivery credits](./minimize-imgix-costs.md). To route all assets through Imgix:
 
 ```php
-'skipTransform' => false,
+'skipImgix' => false,
 ```
 
 To customise the skip logic:
 
 ```php
-'skipTransform' => function(\craft\elements\Asset $asset, ?\craft\models\ImageTransform $transform = null) {
+'skipImgix' => function(\craft\elements\Asset $asset, ?\craft\models\ImageTransform $transform = null) {
     // Only use Imgix when a transform is explicitly applied
     return $transform === null;
 },
 ```
+
+That last example is worth calling out: it matches Craft's own behaviour, where an asset URL is only transformed if a transform was explicitly requested. This plugin routes every asset URL through Imgix by default, transform or not.
+:::
+
+::: warning Renamed in 5.1.0
+`skipImgix` was previously called `skipTransform`. The old name still works but is deprecated, and support for it will be removed in 6.0.
+
+It was renamed because it doesn't skip a *transform* — it skips Imgix altogether, falling back to the filesystem URL. Compare with [`renderOriginal`](./image-transforms.md#serving-the-original-file), which stays on the Imgix CDN but applies no rendering parameters.
 :::
 
 ### Path Resolution Settings
@@ -146,6 +154,21 @@ type: bool
 default: true
 ---
 Include the filesystem's subfolder (e.g. S3 bucket subfolder) in the Imgix path (see [Path Configuration](#path-configuration))
+:::
+
+:::config
+setting: includeLibraryParam
+env: CRAFT_IMGIX_INCLUDE_LIBRARY_PARAM
+type: bool
+default: true
+---
+Include the Imgix SDK's `ixlib` parameter (e.g. `ixlib=php-4.1.0`) in generated URLs. It identifies the client library to Imgix and has no effect on the image returned — a URL carrying only `ixlib` delivers the source file byte-for-byte.
+
+Set to `false` for tidier URLs, including fully parameter-free [`renderOriginal`](./image-transforms.md#serving-the-original-file) URLs:
+
+```php
+'includeLibraryParam' => false,
+```
 :::
 
 ### Volume overrides

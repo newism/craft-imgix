@@ -99,7 +99,11 @@ class Imgix extends BasePlugin
                 /** @var Asset $asset */
                 $asset = $event->sender;
                 $transform = $event->transform;
-                $event->url = self::getInstance()->imgix->generateUrl($asset, $transform);
+                $url = self::getInstance()->imgix->getTransformUrl($asset, $transform);
+                if ($url) {
+                    $event->url = $url;
+                    $event->handled = true;
+                }
             }
         );
 
@@ -228,21 +232,21 @@ class Imgix extends BasePlugin
                 if (!$asset) {
                     continue;
                 }
-                $skipTransform = false;
-                if (isset($volSettings->skipTransform)) {
-                    $skip = $volSettings->skipTransform;
-                    $skipTransform = is_callable($skip) ? $skip($asset, null) : (bool) $skip;
+                $skipImgix = false;
+                if (isset($volSettings->skipImgix)) {
+                    $skip = $volSettings->skipImgix;
+                    $skipImgix = is_callable($skip) ? $skip($asset, null) : (bool)$skip;
                 }
 
                 $sampleAssets[] = [
                     'filename' => $asset->filename,
                     'kind' => $asset->kind,
                     'path' => $asset->getPath(),
-                    'skipped' => $skipTransform,
+                    'skipped' => $skipImgix,
                     'skippedStatusHtml' => Cp::statusLabelHtml([
-                        'color' => $skipTransform ? Color::Teal : Color::Red,
-                        'icon' => $skipTransform ? 'check' : 'xmark',
-                        'label' => $skipTransform ? Craft::t('app', 'Yes') : Craft::t('app', 'No'),
+                        'color' => $skipImgix ? Color::Teal : Color::Red,
+                        'icon' => $skipImgix ? 'check' : 'xmark',
+                        'label' => $skipImgix ? Craft::t('app', 'Yes') : Craft::t('app', 'No'),
                     ]),
                     'transformedUrl' => $asset->getUrl(),
                 ];
@@ -267,6 +271,7 @@ class Imgix extends BasePlugin
                     'domain' => $volSettings->imgixDomain,
                     'enabled' => $volSettings->enabled,
                     'includeFilesystemSubfolder' => $volSettings->includeFilesystemSubfolder,
+                    'includeLibraryParam' => $volSettings->includeLibraryParam,
                     'subPath' => $volSettings->subPath ?: null,
                     'signingKey' => $volSettings->signingKey ? true : false,
                     'labels' => $volSettings->attributeLabels(),
@@ -282,17 +287,19 @@ class Imgix extends BasePlugin
             'config' => [
                 ['imgixDomain', 'CRAFT_IMGIX_DOMAIN', $settings->imgixDomain],
                 ['includeFilesystemSubfolder', 'CRAFT_IMGIX_INCLUDE_FILESYSTEM_SUBFOLDER', $settings->includeFilesystemSubfolder ? 'true' : 'false'],
+                ['includeLibraryParam', 'CRAFT_IMGIX_INCLUDE_LIBRARY_PARAM', $settings->includeLibraryParam ? 'true' : 'false'],
                 ['enabled', 'CRAFT_IMGIX_ENABLED', $settings->enabled ? 'true' : 'false'],
                 ['devMode', 'CRAFT_IMGIX_DEV_MODE', $settings->devMode ? 'true' : 'false'],
                 ['debugLogging', 'CRAFT_IMGIX_DEBUG_LOGGING', $settings->debugLogging ? 'true' : 'false'],
                 ['signingKey', 'CRAFT_IMGIX_SIGNING_KEY', $settings->signingKey ? '••••••••' : null],
                 ['purgeApiKey', 'CRAFT_IMGIX_PURGE_API_KEY', $settings->purgeApiKey ? '••••••••' : null],
                 ['apiBaseUri', 'CRAFT_IMGIX_API_BASE_URI', $settings->apiBaseUri ?: null],
-                ['skipTransform', '—', is_callable($settings->skipTransform) ? 'callable' : ($settings->skipTransform ? 'true' : 'false')],
+                ['skipImgix', '—', is_callable($settings->skipImgix) ? 'callable' : ($settings->skipImgix ? 'true' : 'false')],
                 ['imgixDefaultParams', '—', $settings->imgixDefaultParams ? json_encode($settings->imgixDefaultParams) : null],
             ],
             'volumeData' => $volumeData,
             'volumePathDebug' => $volumePathDebug,
+            'usedDeprecatedSkipTransform' => Settings::$usedDeprecatedSkipTransform,
         ]);
     }
 

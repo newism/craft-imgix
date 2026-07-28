@@ -12,7 +12,7 @@ Every asset served through Imgix consumes [delivery credits](https://docs.imgix.
 
 Non-image assets (PDFs, ZIPs, etc.) served through Imgix consume delivery credits even though no transformation is applied.
 
-**This plugin skips non-image assets by default** (`$asset->kind !== 'image'`). To route all assets through Imgix, set `'skipTransform' => false`. You can also disable Imgix for specific volumes:
+**This plugin skips non-image assets by default** (`$asset->kind !== 'image'`). To route all assets through Imgix, set `'skipImgix' => false`. You can also disable Imgix for specific volumes:
 
 ```php
 use Newism\Imgix\models\VolumeSettings;

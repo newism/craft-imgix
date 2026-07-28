@@ -105,6 +105,61 @@ Apply any [Imgix rendering parameter](https://docs.imgix.com/en-US/apis/renderin
 }) %}
 ```
 
+## Serving the Original File
+
+Imgix optimises images by default — the `imgixDefaultParams` from your config file (typically `auto=format,compress`) are applied to every URL. When you need the untouched original, set `renderOriginal`:
+
+```twig
+{% do asset.setTransform({ renderOriginal: true }) %}
+
+{{ asset.url }}
+{# https://your-source.imgix.net/path/to/image.jpg?ixlib=php-4.1.0 #}
+```
+
+The URL is still served from your Imgix domain and CDN, but with no rendering parameters at all. Config defaults are skipped, and `width`, `height`, `quality`, `format`, `mode`, `position` and `ratio` are all ignored.
+
+`dl` is the one parameter that still applies, so you can force a download of the original:
+
+```twig
+{% do asset.setTransform({
+    renderOriginal: true,
+    imgix: { dl: asset.filename },
+}) %}
+
+<a href="{{ asset.url }}" download>Download original</a>
+{# https://your-source.imgix.net/path/to/image.jpg?dl=image.jpg&ixlib=php-4.1.0 #}
+```
+
+The `ixlib` parameter comes from the Imgix SDK and identifies the client library. It is not a rendering parameter and has no effect on the file returned. Set [`includeLibraryParam`](./configuration.md) to `false` if you want a completely bare URL.
+
+Every other key in the `imgix` object is dropped, and this is deliberate. **Any** rendering parameter sends the image through Imgix's processing pipeline and re-encodes it — even one that asks for the size the image already is. Requesting a 2177px-wide PNG at its native 2177px still returns a different file, about 5% smaller. `w`, `q=100` and `fit=clip` on their own all produce byte-identical re-encoded output.
+
+Only a URL with no rendering parameters returns the source file unchanged. `dl` is safe because it sets a response header rather than entering the pipeline, which is why it's the one parameter allowed through — as is `ixlib`, which Imgix reads for analytics and ignores when serving.
+
+::: tip
+Don't set `width` or `height` alongside `renderOriginal`. The URL ignores them, but `{{ asset.width }}` and `{{ asset.height }}` will still report them, so your markup won't match the file being served.
+:::
+
+::: warning
+`revAssetUrls` cache-busting params are not added to `renderOriginal` URLs, since the point is a URL free of rendering parameters. Replaced assets are still purged from the Imgix cache if you have [cache purging](./cache-purging.md) configured.
+:::
+
+### renderOriginal vs skipImgix
+
+These look similar but do different things:
+
+| | URL host | Query params | Use when |
+|---|---|---|---|
+| `renderOriginal: true` | Imgix domain | None, except `dl` and `ixlib` | You want the original file, delivered over the Imgix CDN |
+| [`skipImgix`](./configuration.md) | Your filesystem | None | You want Imgix out of the picture entirely, e.g. to save delivery credits |
+
+For a one-off filesystem URL without configuring `skipImgix`, use the `filesystemUrl()` method:
+
+```twig
+{{ imgix.filesystemUrl(asset) }}
+{# https://your-bucket.s3.amazonaws.com/path/to/image.jpg #}
+```
+
 ## srcset Generation
 
 The plugin works with Craft's built-in [srcset generation](https://craftcms.com/docs/5.x/development/image-transforms.html#generating-srcset-sizes). Each srcset variant generates a separate Imgix URL with the appropriate dimensions.

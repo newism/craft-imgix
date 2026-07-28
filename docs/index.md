@@ -42,7 +42,7 @@ features:
       link: ./minimize-imgix-costs
       icon: 💰
     - title: PDF Rasterization
-      details: Generate image thumbnails of PDF pages when enabled via skipTransform.
+      details: Generate image thumbnails of PDF pages when enabled via skipImgix.
       link: ./caveats#pdf-files
       icon: 📄
     - title: Placeholder SVG

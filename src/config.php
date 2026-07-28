@@ -7,7 +7,7 @@
  * CRAFT_IMGIX_ prefix (e.g. CRAFT_IMGIX_DOMAIN, CRAFT_IMGIX_SIGNING_KEY).
  *
  * Non-image assets are skipped by default to avoid unnecessary imgix
- * delivery credits. Set skipTransform to false to route all assets through imgix.
+ * delivery credits. Set skipImgix to false to route all assets through imgix.
  *
  * @see \Newism\Imgix\models\Settings
  */
@@ -18,9 +18,10 @@ return [
     // 'devMode' => false,
     // 'debugLogging' => false,
     // 'includeFilesystemSubfolder' => true,
+    // 'includeLibraryParam' => true,
     // 'signingKey' => '',
     // 'purgeApiKey' => '',
-    // 'skipTransform' => false,
+    // 'skipImgix' => false,
     // 'imgixDefaultParams' => [
     //     'auto' => 'format,compress',
     //     'cs' => 'srgb',

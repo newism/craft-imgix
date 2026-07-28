@@ -14,11 +14,18 @@ class VolumeSettings extends BaseConfig
 {
     public ?string $imgixDomain = null;
     public ?bool $includeFilesystemSubfolder = null;
+    public ?bool $includeLibraryParam = null;
     public ?string $subPath = null;
     public ?bool $devMode = null;
     public ?bool $enabled = null;
     public ?bool $debugLogging = null;
     public ?string $signingKey = null;
+    /** @var callable|bool|null */
+    public mixed $skipImgix = null;
+    /**
+     * @var callable|bool|null
+     * @deprecated in 5.1.0. Use [[skipImgix]] instead.
+     */
     public mixed $skipTransform = null;
     public ?array $imgixDefaultParams = null;
 
@@ -31,6 +38,12 @@ class VolumeSettings extends BaseConfig
     public function includeFilesystemSubfolder(bool $value): self
     {
         $this->includeFilesystemSubfolder = $value;
+        return $this;
+    }
+
+    public function includeLibraryParam(bool $value): self
+    {
+        $this->includeLibraryParam = $value;
         return $this;
     }
 
@@ -64,10 +77,19 @@ class VolumeSettings extends BaseConfig
         return $this;
     }
 
+    public function skipImgix(callable|bool $value): self
+    {
+        $this->skipImgix = $value;
+        return $this;
+    }
+
+    /**
+     * @deprecated in 5.1.0. Use [[skipImgix()]] instead.
+     */
     public function skipTransform(callable|bool $value): self
     {
-        $this->skipTransform = $value;
-        return $this;
+        Settings::logSkipTransformDeprecation();
+        return $this->skipImgix($value);
     }
 
     public function imgixDefaultParams(array $value): self

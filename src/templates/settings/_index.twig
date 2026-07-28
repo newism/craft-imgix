@@ -53,6 +53,17 @@
     <hr>
 {% endif %}
 
+{% if usedDeprecatedSkipTransform %}
+    <blockquote class="note warning">
+        <p>
+            The <code>skipTransform</code> setting has been renamed to <code>skipImgix</code>.
+            The old name still works, but support for it will be removed in 6.0 &mdash;
+            rename the key in <code>{{ configFilePath }}</code>.
+        </p>
+    </blockquote>
+    <hr>
+{% endif %}
+
 <h2>Settings</h2>
 <p class="light">
     Managed via <code>{{ configFilePath }}</code> and <code>CRAFT_IMGIX_*</code> environment variables.
@@ -176,6 +187,10 @@
                 <td>{{ debug.imgix.includeFilesystemSubfolder ? 'yes' : 'no' }}</td>
             </tr>
             <tr>
+                <td>{{ debug.imgix.labels.includeLibraryParam ?? 'Include Library Param' }}</td>
+                <td>{{ debug.imgix.includeLibraryParam ? 'yes' : 'no' }}</td>
+            </tr>
+            <tr>
                 <td>Sub Path</td>
                 <td>{% if debug.imgix.subPath %}<code>{{ debug.imgix.subPath }}</code>{% else %}&mdash;{% endif %}</td>
             </tr>
@@ -193,7 +208,7 @@
                 <tr>
                     <th>Asset</th>
                     <th>Kind</th>
-                    <th>Skipped</th>
+                    <th>Skip Imgix</th>
                     <th>Output URL</th>
                 </tr>
             </thead>
