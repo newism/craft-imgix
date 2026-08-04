@@ -25,7 +25,7 @@ class PurgeController extends Controller
             );
         }
 
-        if (Imgix::assetVolumeCanBePurged($asset)) {
+        if (Imgix::assetCanBePurged($asset)) {
             Imgix::addPurgeJob($asset->getUrl());
             return $this->asModelSuccess(
                 $asset,
