@@ -1,5 +1,15 @@
 # Release Notes for Imgix Asset Transformer for Craft CMS
 
+## 5.2.0 - 2026-08-04
+
+### Fixed
+
+- Assets whose volume settings mark them as `skipImgix` are no longer queued for an Imgix cache purge on save/delete. Their URLs never belonged to Imgix, so purging them returned a 403 and failed the queue job.
+
+### Changed
+
+- `Imgix::assetVolumeCanBePurged()` has been renamed to `Imgix::assetCanBePurged()`, which also accounts for `skipImgix`. The old name still works but is deprecated, and support for it will be removed in 6.0.
+
 ## 5.1.0 - 2026-07-28
 
 ### Added

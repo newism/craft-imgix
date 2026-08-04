@@ -130,7 +130,7 @@ class Imgix extends BasePlugin
                     if ($asset->newLocation) {
                         $this->assetsToPurge[$asset->id] = [];
 
-                        if (self::assetVolumeCanBePurged($asset)) {
+                        if (self::assetCanBePurged($asset)) {
                             $this->assetsToPurge[$asset->id][] = $asset->getUrl();
                         }
                     }
@@ -147,7 +147,7 @@ class Imgix extends BasePlugin
                     if (isset($this->assetsToPurge[$asset->id])) {
                         $latestAssetUrl = $asset->getUrl();
                         if (!in_array($latestAssetUrl, $this->assetsToPurge[$asset->id], true)) {
-                            if (self::assetVolumeCanBePurged($asset)) {
+                            if (self::assetCanBePurged($asset)) {
                                 $this->assetsToPurge[$asset->id][] = $latestAssetUrl;
                             }
                         }
@@ -168,7 +168,7 @@ class Imgix extends BasePlugin
                     /** @var Asset $asset */
                     $asset = $event->sender;
 
-                    if (self::assetVolumeCanBePurged($asset)) {
+                    if (self::assetCanBePurged($asset)) {
                         self::addPurgeJob($asset->getUrl());
                     }
                 }
@@ -366,11 +366,50 @@ class Imgix extends BasePlugin
     /**
      * Check if the asset's volume is configured for imgix purging.
      * Uses settings check only — does not trigger URL generation.
+     *
+     * @deprecated in 5.2.0. Use [[assetCanBePurged()]] instead.
      */
     public static function assetVolumeCanBePurged(Asset $asset): bool
     {
-        $volumeSettings = self::getInstance()->imgix->getSettingsForVolume($asset->getVolume());
 
-        return $volumeSettings->enabled && !empty($volumeSettings->imgixDomain);
+        $message = 'The `assetVolumeCanBePurged` static method has been renamed to `assetCanBePurged` which tests the asset and not just the asset\'s volume. Support for the old name will be removed in 6.0.';
+
+        // Settings can be loaded before the database is available (console
+        // install/update), and the deprecator writes to a table.
+        $logged = false;
+        try {
+            if (Craft::$app->getIsInstalled()) {
+                Craft::$app->getDeprecator()->log('newism-imgix:assetVolumeCanBePurged', $message);
+                $logged = true;
+            }
+        } catch (Throwable) {
+            // Fall through to the log
+        }
+
+        if (!$logged) {
+            Craft::warning($message, Imgix::DEBUG_LOG_CATEGORY);
+        }
+
+        return self::assetCanBePurged($asset);
+    }
+
+    /**
+     * Check if the asset's volume is configured for imgix purging and whether the asset would skipImgix.
+     * Uses settings check only — does not trigger URL generation.
+     */
+    public static function assetCanBePurged(Asset $asset): bool
+    {
+        $volumeSettings = self::getInstance()->imgix->getSettingsForVolume($asset->getVolume());
+        $volumeIsEnabled = $volumeSettings->enabled;
+        $volumeHasImgixDomain = !empty($volumeSettings->imgixDomain);
+        $assetSkipsImgix = false;
+        if (isset($volumeSettings->skipImgix)) {
+            $skip = $volumeSettings->skipImgix;
+            $assetSkipsImgix = is_callable($skip)
+                ? $skip($asset, null)
+                : (bool) $skip;
+        }
+
+        return $volumeIsEnabled && $volumeHasImgixDomain && !$assetSkipsImgix;
     }
 }
