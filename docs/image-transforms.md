@@ -69,6 +69,19 @@ You can combine `ratio` with `width` or `height` to control the output size:
 {% do asset.setTransform({ height: 300, ratio: 4/3 }) %}
 ```
 
+::: warning Ratio on its own
+With a `width` or `height`, the other dimension is worked out as soon as the transform is set, so `asset.width` and `asset.height` are correct straight away.
+
+A ratio on its own needs the asset's own width, which the transform doesn't have until a URL is generated. Until then, `asset.width` and `asset.height` return the source image's dimensions. The example above works because `src: asset.url` comes first. If you need the dimensions before the URL (for a placeholder, say), pass a `width` or `height` with the ratio. For the full width, pass the asset's own:
+
+```twig
+{# Full width at 16:9, with asset.width and asset.height correct straight away #}
+{% do asset.setTransform({ width: asset.width, ratio: 16/9 }) %}
+```
+
+`asset.width` is the source width here because no transform is set yet. If one is, it returns that transform's width instead.
+:::
+
 ## Additional Imgix Parameters
 
 Apply any [Imgix rendering parameter](https://docs.imgix.com/en-US/apis/rendering) via the `imgix` object key:

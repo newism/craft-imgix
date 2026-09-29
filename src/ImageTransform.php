@@ -19,4 +19,27 @@ class ImageTransform extends \craft\models\ImageTransform
      * back to the filesystem URL.
      */
     public ?bool $renderOriginal = null;
+
+    /**
+     * Resolve `ratio` into the missing dimension as soon as the transform is created.
+     *
+     * Craft reads the transform's width/height for `{{ asset.width }}` / `{{ asset.height }}`
+     * without generating a URL, so the ratio has to be applied here rather than only in
+     * ImgixService::getTransformUrl(). A ratio with neither dimension needs the source
+     * image's size, so that case is still resolved when the URL is generated.
+     */
+    public function init(): void
+    {
+        parent::init();
+
+        if (!is_numeric($this->ratio) || $this->ratio <= 0) {
+            return;
+        }
+
+        if ($this->width && !$this->height) {
+            $this->height = (int)round($this->width / $this->ratio);
+        } elseif ($this->height && !$this->width) {
+            $this->width = (int)round($this->height * $this->ratio);
+        }
+    }
 }
