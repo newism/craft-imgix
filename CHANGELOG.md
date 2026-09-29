@@ -1,6 +1,6 @@
 # Release Notes for Imgix Asset Transformer for Craft CMS
 
-## Unreleased
+## 5.1.1 - 2026-09-29
 
 ### Fixed
 
