@@ -145,7 +145,7 @@ Every other key in the `imgix` object is dropped, and this is deliberate. **Any*
 Only a URL with no rendering parameters returns the source file unchanged. `dl` is safe because it sets a response header rather than entering the pipeline, which is why it's the one parameter allowed through — as is `ixlib`, which Imgix reads for analytics and ignores when serving.
 
 ::: tip
-Don't set `width` or `height` alongside `renderOriginal`. The URL ignores them, but `{{ asset.width }}` and `{{ asset.height }}` will still report them, so your markup won't match the file being served.
+Don't set `width` or `height` alongside `renderOriginal`. The URL ignores them, but <span v-pre>`{{ asset.width }}`</span> and <span v-pre>`{{ asset.height }}`</span> will still report them, so your markup won't match the file being served.
 :::
 
 ::: warning
