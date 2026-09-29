@@ -22,7 +22,7 @@ features:
       link: ./image-transforms#additional-imgix-parameters
       icon: 🎛️
     - title: Ratio-Based Transforms
-      details: Aspect-ratio-locked images with the ratio option. Combine with width or height to control output size.
+      details: Aspect-ratio-locked images with the ratio option, combined with a width or height to set the output size.
       link: ./image-transforms#ratio-based-transforms
       icon: 📐
     - title: Automatic Cache Purging

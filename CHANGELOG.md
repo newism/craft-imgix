@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- `ratio` combined with a `width` or `height` is now applied to `asset.width` and `asset.height` as soon as the transform is set. Previously they returned the source image's proportions until a URL had been generated, so outputting the dimensions before the URL (e.g. for a placeholder) gave the wrong height. A `ratio` on its own still needs a URL first; see [Ratio-Based Transforms](https://plugins.newism.com.au/imgix-asset-transformer/image-transforms#ratio-based-transforms).
+- `ratio` combined with a `width` or `height` is now applied to `asset.width` and `asset.height` as soon as the transform is set. Previously they returned the source image's proportions until a URL had been generated, so outputting the dimensions before the URL (e.g. for a placeholder) gave the wrong height. `ratio` needs a `width` or `height`; see [Ratio-Based Transforms](https://plugins.newism.com.au/imgix-asset-transformer/image-transforms#ratio-based-transforms).
 
 ## 5.1.0 - 2026-07-28
 

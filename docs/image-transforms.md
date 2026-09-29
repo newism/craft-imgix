@@ -44,11 +44,11 @@ Craft CMS transform modes are mapped to [Imgix fit parameters](https://docs.imgi
 
 ## Ratio-Based Transforms
 
-This plugin adds a `ratio` option which sets the aspect ratio of the image. When only a ratio is provided, the asset's width is used as the base dimension.
+This plugin adds a `ratio` option which sets the aspect ratio of the image. **`ratio` requires a `width` or `height`**: the other dimension is worked out from it as soon as the transform is set, so `asset.width` and `asset.height` are correct straight away.
 
 ```twig
-{# Crop to 16:9 using the asset's full width #}
-{% do asset.setTransform({ ratio: 16/9 }) %}
+{# 400px wide at 16:9 #}
+{% do asset.setTransform({ width: 400, ratio: 16/9 }) %}
 
 {{ tag('img', {
   src: asset.url,
@@ -59,27 +59,22 @@ This plugin adds a `ratio` option which sets the aspect ratio of the image. When
 }) }}
 ```
 
-You can combine `ratio` with `width` or `height` to control the output size:
-
 ```twig
-{# 400px wide at 16:9 #}
-{% do asset.setTransform({ width: 400, ratio: 16/9 }) %}
-
 {# 300px tall at 4:3 #}
 {% do asset.setTransform({ height: 300, ratio: 4/3 }) %}
 ```
 
-::: warning Ratio on its own
-With a `width` or `height`, the other dimension is worked out as soon as the transform is set, so `asset.width` and `asset.height` are correct straight away.
-
-A ratio on its own needs the asset's own width, which the transform doesn't have until a URL is generated. Until then, `asset.width` and `asset.height` return the source image's dimensions. The example above works because `src: asset.url` comes first. If you need the dimensions before the URL (for a placeholder, say), pass a `width` or `height` with the ratio. For the full width, pass the asset's own:
+For the asset's full width, pass its own width:
 
 ```twig
-{# Full width at 16:9, with asset.width and asset.height correct straight away #}
+{# Full width at 16:9 #}
 {% do asset.setTransform({ width: asset.width, ratio: 16/9 }) %}
 ```
 
 `asset.width` is the source width here because no transform is set yet. If one is, it returns that transform's width instead.
+
+::: warning
+A `ratio` without a `width` or `height` isn't supported. The transform has no access to the source image's size, so `asset.width` and `asset.height` return the source dimensions rather than the cropped ones.
 :::
 
 ## Additional Imgix Parameters
